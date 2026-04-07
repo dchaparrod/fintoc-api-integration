@@ -1,11 +1,47 @@
 import { getDb } from "./index";
 import type {
+  SavedCounterparty,
   TransferOperation,
   Transaction,
   OperationWithDetails,
 } from "@/lib/types";
 
 const DAILY_LIMIT = 7_000_000;
+
+// ── Saved Counterparties ────────────────────────────────
+
+export async function listSavedCounterparties(): Promise<SavedCounterparty[]> {
+  const db = await getDb();
+  const res = await db.query<SavedCounterparty>(
+    "SELECT * FROM saved_counterparties ORDER BY holder_name"
+  );
+  return res.rows;
+}
+
+export interface CreateCounterpartyParams {
+  holderId: string;
+  holderName: string;
+  accountNumber: string;
+  accountType: string;
+  institutionId: string;
+}
+
+export async function createSavedCounterparty(
+  params: CreateCounterpartyParams
+): Promise<SavedCounterparty> {
+  const db = await getDb();
+  const res = await db.query<SavedCounterparty>(
+    `INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [params.holderId, params.holderName, params.accountNumber, params.accountType, params.institutionId]
+  );
+  return res.rows[0];
+}
+
+export async function deleteSavedCounterparty(id: number): Promise<void> {
+  const db = await getDb();
+  await db.query("DELETE FROM saved_counterparties WHERE id = $1", [id]);
+}
 
 // ── Transfer Operations ──────────────────────────────────
 

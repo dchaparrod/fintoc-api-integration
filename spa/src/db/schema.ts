@@ -1,4 +1,14 @@
 export const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS saved_counterparties (
+  id SERIAL PRIMARY KEY,
+  holder_id TEXT NOT NULL,
+  holder_name TEXT NOT NULL,
+  account_number TEXT NOT NULL,
+  account_type TEXT NOT NULL DEFAULT 'checking_account',
+  institution_id TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS transfer_operations (
   id SERIAL PRIMARY KEY,
   account_id TEXT NOT NULL,
@@ -29,6 +39,23 @@ CREATE TABLE IF NOT EXISTS transactions (
 `;
 
 export const SEED_SQL = `
+-- ── Saved Counterparties (address book) ──
+INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
+SELECT '771433855', 'Piped Piper SpA', '502955923', 'checking_account', 'cl_banco_de_chile'
+WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '771433855');
+
+INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
+SELECT '123456789', 'Hooli Inc', '301234567', 'checking_account', 'cl_banco_santander'
+WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '123456789');
+
+INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
+SELECT '987654321', 'Raviga Capital', '701987654', 'sight_account', 'cl_banco_estado'
+WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '987654321');
+
+INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
+SELECT '456789012', 'Bachmanity LLC', '901456789', 'checking_account', 'cl_banco_bci'
+WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '456789012');
+
 -- ── Operation 1: Small transfer (single transaction, already succeeded) ──
 INSERT INTO transfer_operations
   (account_id, account_name, counterparty_holder_id, counterparty_holder_name,

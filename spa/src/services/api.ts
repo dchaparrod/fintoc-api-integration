@@ -1,4 +1,4 @@
-import type { FintocAccount, FintocCounterparty, Institution } from "@/lib/types";
+import type { FintocAccount, Institution } from "@/lib/types";
 
 const API_BASE = "/api";
 
@@ -12,7 +12,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
-// ── Fintoc Data (accounts, counterparties, institutions) ─
+// ── Fintoc Data (accounts, institutions) ─────────────────
 
 export async function fetchAccounts(): Promise<FintocAccount[]> {
   const response = await fetch(`${API_BASE}/accounts`);
@@ -24,41 +24,24 @@ export async function fetchAccount(accountId: string): Promise<FintocAccount> {
   return handleResponse<FintocAccount>(response);
 }
 
-export async function fetchCounterparties(): Promise<FintocCounterparty[]> {
-  const response = await fetch(`${API_BASE}/counterparties`);
-  return handleResponse<FintocCounterparty[]>(response);
-}
-
-export interface CreateCounterpartyPayload {
-  holder_id: string;
-  holder_name: string;
-  institution_id: string;
-  account_number: string;
-  account_type?: string;
-}
-
-export async function createCounterparty(data: CreateCounterpartyPayload): Promise<FintocCounterparty> {
-  const response = await fetch(`${API_BASE}/counterparties`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return handleResponse<FintocCounterparty>(response);
-}
-
-export async function deleteCounterparty(counterpartyId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/counterparties/${counterpartyId}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(body.detail || `HTTP ${response.status}`);
-  }
-}
-
 export async function fetchInstitutions(): Promise<Institution[]> {
   const response = await fetch(`${API_BASE}/institutions`);
   return handleResponse<Institution[]>(response);
+}
+
+// ── Simulate (test mode) ────────────────────────────────
+
+export async function simulateReceiveTransfer(
+  accountNumberId: string,
+  amount: number,
+  currency: string = "CLP"
+): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE}/simulate/receive-transfer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_number_id: accountNumberId, amount, currency }),
+  });
+  return handleResponse(response);
 }
 
 // ── Transfers ────────────────────────────────────────────

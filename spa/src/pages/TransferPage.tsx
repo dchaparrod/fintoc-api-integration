@@ -5,17 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { createTransferOperation } from "@/db/queries";
-import { fetchAccounts, fetchCounterparties } from "@/services/api";
+import { createTransferOperation, listSavedCounterparties } from "@/db/queries";
+import { fetchAccounts } from "@/services/api";
 import { formatCLP } from "@/lib/utils";
-import type { FintocAccount, FintocCounterparty } from "@/lib/types";
+import type { FintocAccount, SavedCounterparty } from "@/lib/types";
 import { Send, AlertTriangle, CheckCircle } from "lucide-react";
 
 const DAILY_LIMIT = 7_000_000;
 
 export default function TransferPage() {
   const [accounts, setAccounts] = useState<FintocAccount[]>([]);
-  const [counterparties, setCounterparties] = useState<FintocCounterparty[]>([]);
+  const [counterparties, setCounterparties] = useState<SavedCounterparty[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [selectedCounterpartyIdx, setSelectedCounterpartyIdx] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -31,7 +31,7 @@ export default function TransferPage() {
       setDataLoading(true);
       setDataError(null);
       try {
-        const [accs, cps] = await Promise.all([fetchAccounts(), fetchCounterparties()]);
+        const [accs, cps] = await Promise.all([fetchAccounts(), listSavedCounterparties()]);
         setAccounts(accs);
         setCounterparties(cps);
       } catch (err) {
@@ -44,7 +44,7 @@ export default function TransferPage() {
   }, []);
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const selectedCounterparty = selectedCounterpartyIdx !== "" ? counterparties[Number(selectedCounterpartyIdx)] : null;
+  const selectedCounterparty = selectedCounterpartyIdx !== "" ? counterparties.find(cp => cp.id === Number(selectedCounterpartyIdx)) || null : null;
 
   const amountNum = Number(amount) || 0;
   const daysNeeded = amountNum > 0 ? Math.ceil(amountNum / DAILY_LIMIT) : 0;
@@ -61,11 +61,11 @@ export default function TransferPage() {
       const { operation, transactions } = await createTransferOperation({
         accountId: selectedAccount.id,
         accountName: selectedAccount.name || selectedAccount.id,
-        counterpartyHolderId: selectedCounterparty.holder_id || "",
-        counterpartyHolderName: selectedCounterparty.holder_name || "",
-        counterpartyAccountNumber: selectedCounterparty.account_number || "",
-        counterpartyAccountType: selectedCounterparty.account_type || "",
-        counterpartyInstitutionId: selectedCounterparty.institution_id || "",
+        counterpartyHolderId: selectedCounterparty.holder_id,
+        counterpartyHolderName: selectedCounterparty.holder_name,
+        counterpartyAccountNumber: selectedCounterparty.account_number,
+        counterpartyAccountType: selectedCounterparty.account_type,
+        counterpartyInstitutionId: selectedCounterparty.institution_id,
         totalAmount: amountNum,
         comment,
         description,
@@ -137,8 +137,8 @@ export default function TransferPage() {
                 disabled={dataLoading}
               >
                 <option value="">{dataLoading ? "Loading counterparties..." : "Select a counterparty..."}</option>
-                {counterparties.map((cp, idx) => (
-                  <option key={cp.id || idx} value={idx}>
+                {counterparties.map((cp) => (
+                  <option key={cp.id} value={cp.id}>
                     {cp.holder_name} — {cp.account_number} ({cp.institution_id})
                   </option>
                 ))}

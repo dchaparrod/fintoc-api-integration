@@ -12,14 +12,6 @@ class CounterpartyRequest(BaseModel):
     institution_id: str
 
 
-class CreateCounterpartyRequest(BaseModel):
-    holder_id: str
-    holder_name: str
-    institution_id: str
-    account_number: str
-    account_type: Optional[str] = None
-
-
 # ── Transfer ─────────────────────────────────────────────
 
 class TransferRequest(BaseModel):
@@ -57,3 +49,11 @@ class PendingTransaction(BaseModel):
 class ExecutionResult(BaseModel):
     results: list[TransferResponse]
     errors: list[str]
+
+
+# ── Simulate ─────────────────────────────────────────────
+
+class SimulateReceiveRequest(BaseModel):
+    account_number_id: str
+    amount: int
+    currency: str = "CLP"

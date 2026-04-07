@@ -9,21 +9,24 @@ export interface FintocAccount {
   type: string | null;
 }
 
-export interface FintocCounterparty {
-  id: string | null;
-  holder_id: string | null;
-  holder_name: string | null;
-  account_number: string | null;
-  account_type: string | null;
-  institution_id: string | null;
-}
-
 export interface Institution {
   name: string;
   id: string;
 }
 
-// ── Local PGlite types (operations + transactions) ───────
+// ── Local PGlite types ──────────────────────────────────
+
+export interface SavedCounterparty {
+  id: number;
+  holder_id: string;
+  holder_name: string;
+  account_number: string;
+  account_type: string;
+  institution_id: string;
+  created_at: string;
+}
+
+// ── Operations + Transactions ───────────────────────────
 
 export type OperationStatus = "pending" | "in_progress" | "completed" | "failed";
 

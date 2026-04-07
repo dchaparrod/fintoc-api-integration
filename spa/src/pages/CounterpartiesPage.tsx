@@ -6,16 +6,16 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  fetchCounterparties,
-  fetchInstitutions,
-  createCounterparty,
-  deleteCounterparty,
-} from "@/services/api";
-import type { FintocCounterparty, Institution } from "@/lib/types";
+  listSavedCounterparties,
+  createSavedCounterparty,
+  deleteSavedCounterparty,
+} from "@/db/queries";
+import { fetchInstitutions } from "@/services/api";
+import type { SavedCounterparty, Institution } from "@/lib/types";
 import { Users, Plus, Trash2, AlertTriangle, CheckCircle } from "lucide-react";
 
 export default function CounterpartiesPage() {
-  const [counterparties, setCounterparties] = useState<FintocCounterparty[]>([]);
+  const [counterparties, setCounterparties] = useState<SavedCounterparty[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,10 @@ export default function CounterpartiesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [cps, insts] = await Promise.all([fetchCounterparties(), fetchInstitutions()]);
+      const [cps, insts] = await Promise.all([
+        listSavedCounterparties(),
+        fetchInstitutions(),
+      ]);
       setCounterparties(cps);
       setInstitutions(insts);
     } catch (err) {
@@ -64,16 +67,16 @@ export default function CounterpartiesPage() {
     setCreating(true);
     setResult(null);
     try {
-      const cp = await createCounterparty({
-        holder_id: holderId,
-        holder_name: holderName,
-        account_number: accountNumber,
-        account_type: accountType || undefined,
-        institution_id: institutionId,
+      const cp = await createSavedCounterparty({
+        holderId,
+        holderName,
+        accountNumber,
+        accountType,
+        institutionId,
       });
       setResult({
         success: true,
-        message: `Counterparty "${cp.holder_name || holderName}" created successfully.`,
+        message: `Counterparty "${cp.holder_name}" saved successfully.`,
       });
       resetForm();
       await loadData();
@@ -81,42 +84,40 @@ export default function CounterpartiesPage() {
     } catch (err) {
       setResult({
         success: false,
-        message: err instanceof Error ? err.message : "Failed to create counterparty",
+        message: err instanceof Error ? err.message : "Failed to save counterparty",
       });
     } finally {
       setCreating(false);
     }
   }
 
-  async function handleDelete(cpId: string, cpName: string | null) {
-    if (!confirm(`Delete counterparty "${cpName || cpId}"? This cannot be undone.`)) return;
+  async function handleDelete(cpId: number, cpName: string) {
+    if (!confirm(`Delete "${cpName}"? This cannot be undone.`)) return;
     try {
-      await deleteCounterparty(cpId);
+      await deleteSavedCounterparty(cpId);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete counterparty");
     }
   }
 
-  function institutionName(id: string | null): string {
-    if (!id) return "—";
+  function institutionName(id: string): string {
     const inst = institutions.find((i) => i.id === id);
     return inst ? inst.name : id;
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* List */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Counterparties
+                Saved Counterparties
               </CardTitle>
               <CardDescription>
-                Manage your Fintoc counterparties (transfer destinations).
+                Manage your saved transfer destinations. These are stored locally and used when creating transfers.
               </CardDescription>
             </div>
             <Button
@@ -145,7 +146,7 @@ export default function CounterpartiesPage() {
             <div className="text-center text-muted-foreground py-8">Loading...</div>
           ) : counterparties.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
-              No counterparties yet. Create one to get started.
+              No saved counterparties yet. Create one to get started.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -161,28 +162,26 @@ export default function CounterpartiesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {counterparties.map((cp, idx) => (
-                    <tr key={cp.id || idx} className="border-b border-border last:border-0">
-                      <td className="p-3 font-medium">{cp.holder_name || "—"}</td>
-                      <td className="p-3 font-mono text-xs">{cp.holder_id || "—"}</td>
-                      <td className="p-3 font-mono text-xs">{cp.account_number || "—"}</td>
+                  {counterparties.map((cp) => (
+                    <tr key={cp.id} className="border-b border-border last:border-0">
+                      <td className="p-3 font-medium">{cp.holder_name}</td>
+                      <td className="p-3 font-mono text-xs">{cp.holder_id}</td>
+                      <td className="p-3 font-mono text-xs">{cp.account_number}</td>
                       <td className="p-3">
                         <Badge variant="secondary">
-                          {cp.account_type === "checking_account" ? "Cta. Corriente" : cp.account_type === "sight_account" ? "Cta. Vista" : cp.account_type || "—"}
+                          {cp.account_type === "checking_account" ? "Cta. Corriente" : cp.account_type === "sight_account" ? "Cta. Vista" : cp.account_type}
                         </Badge>
                       </td>
                       <td className="p-3 text-xs">{institutionName(cp.institution_id)}</td>
                       <td className="p-3 text-right">
-                        {cp.id && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(cp.id!, cp.holder_name)}
-                            className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(cp.id, cp.holder_name)}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -193,11 +192,10 @@ export default function CounterpartiesPage() {
         </CardContent>
       </Card>
 
-      {/* Create Form */}
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Create Counterparty</CardTitle>
+            <CardTitle className="text-base">New Counterparty</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-4">
@@ -267,7 +265,7 @@ export default function CounterpartiesPage() {
 
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={creating || !holderId || !holderName || !accountNumber || !institutionId}>
-                  {creating ? "Creating..." : "Create Counterparty"}
+                  {creating ? "Saving..." : "Save Counterparty"}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => { setShowForm(false); resetForm(); }}>
                   Cancel

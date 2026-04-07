@@ -9,7 +9,7 @@ from fintoc import Fintoc
 from fintoc.errors import FintocError
 
 from .jws import generate_jws_signature_header
-from .schemas import CreateCounterpartyRequest, TransferRequest, TransferResponse
+from .schemas import TransferRequest, TransferResponse
 
 logger = logging.getLogger(__name__)
 
@@ -77,75 +77,31 @@ def get_account(account_id: str) -> dict:
         raise
 
 
-# ── Counterparties (direct HTTP — not in SDK) ────────────
+# ── Simulate (test mode) ────────────────────────────────
 
-def list_counterparties() -> list[dict]:
-    """Fetch all counterparties from Fintoc."""
-    try:
-        resp = httpx.get(
-            f"{FINTOC_BASE_URL}/v1/counterparties",
-            headers=_api_headers(),
-            params={"per_page": 300},
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.error("Failed to list counterparties: %s %s", e.response.status_code, e.response.text)
-        raise
-    except Exception as e:
-        logger.error("Unexpected error listing counterparties: %s", str(e))
-        raise
-
-
-def get_counterparty(counterparty_id: str) -> dict:
-    """Retrieve a single counterparty by ID."""
-    try:
-        resp = httpx.get(
-            f"{FINTOC_BASE_URL}/v1/counterparties/{counterparty_id}",
-            headers=_api_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.error("Failed to get counterparty %s: %s", counterparty_id, e.response.text)
-        raise
-
-
-def create_counterparty(data: CreateCounterpartyRequest) -> dict:
-    """Create a new counterparty via Fintoc API."""
-    body = {
-        "holder_id": data.holder_id,
-        "holder_name": data.holder_name,
-        "institution_id": data.institution_id,
-        "account_number": data.account_number,
-    }
-    if data.account_type:
-        body["account_type"] = data.account_type
+def simulate_receive_transfer(account_number_id: str, amount: int, currency: str = "CLP") -> dict:
+    """Simulate receiving an inbound transfer to fund a test account."""
     try:
         resp = httpx.post(
-            f"{FINTOC_BASE_URL}/v1/counterparties",
+            f"{FINTOC_BASE_URL}/v1/simulate/receive-transfer",
             headers=_api_headers(),
-            json=body,
+            json={
+                "account_number_id": account_number_id,
+                "amount": amount,
+                "currency": currency,
+            },
         )
         resp.raise_for_status()
         return resp.json()
     except httpx.HTTPStatusError as e:
-        logger.error("Failed to create counterparty: %s %s", e.response.status_code, e.response.text)
+        logger.error("Failed to simulate receive transfer: %s %s", e.response.status_code, e.response.text)
+        raise
+    except Exception as e:
+        logger.error("Unexpected error simulating receive transfer: %s", str(e))
         raise
 
 
-def delete_counterparty(counterparty_id: str) -> None:
-    """Delete a counterparty by ID."""
-    try:
-        resp = httpx.delete(
-            f"{FINTOC_BASE_URL}/v1/counterparties/{counterparty_id}",
-            headers=_api_headers(),
-        )
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        logger.error("Failed to delete counterparty %s: %s", counterparty_id, e.response.text)
-        raise
-
+# ── Transfers ────────────────────────────────────────────
 
 def execute_transfer(
     req: TransferRequest,

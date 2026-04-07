@@ -3,16 +3,13 @@ import logging
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from .schemas import TransferRequest, TransferResponse, ExecutionResult, CreateCounterpartyRequest
+from .schemas import TransferRequest, TransferResponse, ExecutionResult, SimulateReceiveRequest
 from .fintoc_client import (
     execute_transfer,
     list_accounts,
     get_account,
-    list_counterparties,
-    get_counterparty,
-    create_counterparty,
-    delete_counterparty,
     get_institutions,
+    simulate_receive_transfer,
 )
 from .transfer_pending import process_pending_transactions, build_pending_list_from_payload
 
@@ -61,43 +58,6 @@ async def api_get_account(account_id: str):
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@app.get("/api/counterparties")
-async def api_list_counterparties():
-    """List all Fintoc counterparties."""
-    try:
-        return list_counterparties()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-
-@app.get("/api/counterparties/{counterparty_id}")
-async def api_get_counterparty(counterparty_id: str):
-    """Get a single Fintoc counterparty by ID."""
-    try:
-        return get_counterparty(counterparty_id)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-
-@app.post("/api/counterparties")
-async def api_create_counterparty(req: CreateCounterpartyRequest):
-    """Create a new counterparty in Fintoc."""
-    try:
-        return create_counterparty(req)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-
-@app.delete("/api/counterparties/{counterparty_id}")
-async def api_delete_counterparty(counterparty_id: str):
-    """Delete a counterparty from Fintoc."""
-    try:
-        delete_counterparty(counterparty_id)
-        return {"status": "deleted"}
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-
 @app.get("/api/institutions")
 async def api_list_institutions():
     """List hardcoded Chilean financial institutions."""
@@ -136,3 +96,14 @@ async def run_pending_transfers(
 
     result = process_pending_transactions(pending, simulate=simulate)
     return result
+
+
+# ── Simulate (test mode) ─────────────────────────────────
+
+@app.post("/api/simulate/receive-transfer")
+async def api_simulate_receive_transfer(req: SimulateReceiveRequest):
+    """Simulate receiving an inbound transfer to fund a test account."""
+    try:
+        return simulate_receive_transfer(req.account_number_id, req.amount, req.currency)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
