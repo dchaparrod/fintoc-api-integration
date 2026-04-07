@@ -1,27 +1,41 @@
-export interface Client {
-  id: number;
-  name: string;
-  rut: string;
-  account_id: string;
-  daily_limit: number;
+// ── Fintoc API types (fetched from backend) ──────────────
+
+export interface FintocAccount {
+  id: string;
+  name: string | null;
+  currency: string;
+  balance: number | null;
+  status: string | null;
+  type: string | null;
 }
 
-export interface ClientCounterparty {
-  id: number;
-  client_id: number;
-  holder_id: string;
-  holder_name: string;
-  account_number: string;
-  account_type: "checking_account" | "sight_account";
-  institution_id: string;
+export interface FintocCounterparty {
+  id: string | null;
+  holder_id: string | null;
+  holder_name: string | null;
+  account_number: string | null;
+  account_type: string | null;
+  institution_id: string | null;
 }
+
+export interface Institution {
+  name: string;
+  id: string;
+}
+
+// ── Local PGlite types (operations + transactions) ───────
 
 export type OperationStatus = "pending" | "in_progress" | "completed" | "failed";
 
 export interface TransferOperation {
   id: number;
-  client_id: number;
-  client_counterparty_id: number;
+  account_id: string;
+  account_name: string;
+  counterparty_holder_id: string;
+  counterparty_holder_name: string;
+  counterparty_account_number: string;
+  counterparty_account_type: string;
+  counterparty_institution_id: string;
   total_amount: number;
   currency: string;
   comment: string;
@@ -43,17 +57,6 @@ export interface Transaction {
   created_at: string;
 }
 
-export interface DailyExecutionLog {
-  id: number;
-  client_id: number;
-  execution_date: string;
-  total_executed: number;
-  status: string;
-}
-
 export interface OperationWithDetails extends TransferOperation {
-  client_name?: string;
-  client_rut?: string;
-  counterparty_name?: string;
   transactions?: Transaction[];
 }

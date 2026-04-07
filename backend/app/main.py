@@ -3,7 +3,13 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .schemas import TransferRequest, TransferResponse, ExecutionResult
-from .fintoc_client import execute_transfer
+from .fintoc_client import (
+    execute_transfer,
+    list_accounts,
+    get_account,
+    list_counterparties,
+    get_institutions,
+)
 from .transfer_pending import process_pending_transactions, build_pending_list_from_payload
 
 logging.basicConfig(
@@ -12,8 +18,8 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="Fintoc Transfer Worker",
-    description="Backend service for Fintoc transfer execution, JWS signing, and daily batch processing.",
+    title="Fintoc Transfer Backend",
+    description="Backend service for Fintoc accounts, counterparties, transfer execution, JWS signing, and daily batch processing.",
     version="0.1.0",
 )
 
@@ -30,6 +36,43 @@ app.add_middleware(
 async def health():
     return {"status": "ok"}
 
+
+# ── Fintoc Data Endpoints ─────────────────────────────────
+
+@app.get("/api/accounts")
+async def api_list_accounts():
+    """List all active Fintoc accounts."""
+    try:
+        return list_accounts()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/accounts/{account_id}")
+async def api_get_account(account_id: str):
+    """Get a single Fintoc account by ID."""
+    try:
+        return get_account(account_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/counterparties")
+async def api_list_counterparties():
+    """List all Fintoc counterparties."""
+    try:
+        return list_counterparties()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/institutions")
+async def api_list_institutions():
+    """List hardcoded Chilean financial institutions."""
+    return get_institutions()
+
+
+# ── Transfer Endpoints ────────────────────────────────────
 
 @app.post("/api/transfer", response_model=TransferResponse)
 async def create_transfer(req: TransferRequest):

@@ -1,7 +1,5 @@
 import { getDb } from "./index";
 import type {
-  Client,
-  ClientCounterparty,
   TransferOperation,
   Transaction,
   OperationWithDetails,
@@ -9,58 +7,56 @@ import type {
 
 const DAILY_LIMIT = 7_000_000;
 
-// ── Clients ──────────────────────────────────────────────
-
-export async function getClients(): Promise<Client[]> {
-  const db = await getDb();
-  const res = await db.query<Client>("SELECT * FROM clients ORDER BY id");
-  return res.rows;
-}
-
-export async function getClientById(id: number): Promise<Client | null> {
-  const db = await getDb();
-  const res = await db.query<Client>("SELECT * FROM clients WHERE id = $1", [id]);
-  return res.rows[0] ?? null;
-}
-
-// ── Counterparties ───────────────────────────────────────
-
-export async function getCounterpartiesByClient(clientId: number): Promise<ClientCounterparty[]> {
-  const db = await getDb();
-  const res = await db.query<ClientCounterparty>(
-    "SELECT * FROM client_counterparties WHERE client_id = $1 ORDER BY id",
-    [clientId]
-  );
-  return res.rows;
-}
-
 // ── Transfer Operations ──────────────────────────────────
 
+export interface CreateOperationParams {
+  accountId: string;
+  accountName: string;
+  counterpartyHolderId: string;
+  counterpartyHolderName: string;
+  counterpartyAccountNumber: string;
+  counterpartyAccountType: string;
+  counterpartyInstitutionId: string;
+  totalAmount: number;
+  comment: string;
+  description: string;
+  currency?: string;
+  dailyLimit?: number;
+}
+
 export async function createTransferOperation(
-  clientId: number,
-  counterpartyId: number,
-  totalAmount: number,
-  comment: string,
-  description: string,
-  currency: string = "CLP"
+  params: CreateOperationParams
 ): Promise<{ operation: TransferOperation; transactions: Transaction[] }> {
   const db = await getDb();
-  const client = await getClientById(clientId);
-  if (!client) throw new Error("Client not found");
+  const dailyLimit = params.dailyLimit || DAILY_LIMIT;
+  const currency = params.currency || "CLP";
 
-  const dailyLimit = client.daily_limit || DAILY_LIMIT;
-
-  // Create the operation
   const opRes = await db.query<TransferOperation>(
-    `INSERT INTO transfer_operations (client_id, client_counterparty_id, total_amount, currency, comment, description)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [clientId, counterpartyId, totalAmount, currency, comment, description]
+    `INSERT INTO transfer_operations
+       (account_id, account_name, counterparty_holder_id, counterparty_holder_name,
+        counterparty_account_number, counterparty_account_type, counterparty_institution_id,
+        total_amount, currency, comment, description)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     RETURNING *`,
+    [
+      params.accountId,
+      params.accountName,
+      params.counterpartyHolderId,
+      params.counterpartyHolderName,
+      params.counterpartyAccountNumber,
+      params.counterpartyAccountType,
+      params.counterpartyInstitutionId,
+      params.totalAmount,
+      currency,
+      params.comment,
+      params.description,
+    ]
   );
   const operation = opRes.rows[0];
 
-  // Split into transactions
+  // Split into daily transactions
   const transactions: Transaction[] = [];
-  let remaining = totalAmount;
+  let remaining = params.totalAmount;
   let dayOffset = 0;
 
   while (remaining > 0) {
@@ -87,20 +83,11 @@ export async function createTransferOperation(
 export async function getOperationsWithDetails(): Promise<OperationWithDetails[]> {
   const db = await getDb();
   const res = await db.query<OperationWithDetails>(
-    `SELECT
-       op.*,
-       c.name AS client_name,
-       c.rut AS client_rut,
-       cc.holder_name AS counterparty_name
-     FROM transfer_operations op
-     JOIN clients c ON c.id = op.client_id
-     JOIN client_counterparties cc ON cc.id = op.client_counterparty_id
-     ORDER BY op.created_at DESC`
+    `SELECT * FROM transfer_operations ORDER BY created_at DESC`
   );
 
   const operations = res.rows;
 
-  // Attach transactions to each operation
   for (const op of operations) {
     const txRes = await db.query<Transaction>(
       "SELECT * FROM transactions WHERE transfer_operation_id = $1 ORDER BY scheduled_date, id",
@@ -112,31 +99,25 @@ export async function getOperationsWithDetails(): Promise<OperationWithDetails[]
   return operations;
 }
 
-export async function getTransactionsByOperation(operationId: number): Promise<Transaction[]> {
-  const db = await getDb();
-  const res = await db.query<Transaction>(
-    "SELECT * FROM transactions WHERE transfer_operation_id = $1 ORDER BY scheduled_date, id",
-    [operationId]
-  );
-  return res.rows;
-}
-
-export async function getPendingTransactionsByClient(
-  clientId: number,
+export async function getPendingTransactionsByAccount(
+  accountId: string,
   date?: string
-): Promise<Transaction[]> {
+): Promise<(Transaction & { account_id: string; counterparty_holder_id: string; counterparty_holder_name: string; counterparty_account_number: string; counterparty_account_type: string; counterparty_institution_id: string; comment: string })[]> {
   const db = await getDb();
   const targetDate = date || new Date().toISOString().split("T")[0];
-  const res = await db.query<Transaction>(
-    `SELECT t.* FROM transactions t
+  const res = await db.query(
+    `SELECT t.*, op.account_id, op.counterparty_holder_id, op.counterparty_holder_name,
+            op.counterparty_account_number, op.counterparty_account_type,
+            op.counterparty_institution_id, op.comment
+     FROM transactions t
      JOIN transfer_operations op ON op.id = t.transfer_operation_id
-     WHERE op.client_id = $1
+     WHERE op.account_id = $1
        AND t.status = 'pending'
        AND t.scheduled_date <= $2
      ORDER BY t.scheduled_date, t.id`,
-    [clientId, targetDate]
+    [accountId, targetDate]
   );
-  return res.rows;
+  return res.rows as any;
 }
 
 export async function updateTransactionStatus(

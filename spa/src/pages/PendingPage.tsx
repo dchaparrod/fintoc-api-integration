@@ -57,7 +57,7 @@ export default function PendingPage() {
     setExecuting(true);
     setExecResult(null);
     try {
-      const res = await executePendingTransfers(false);
+      const res = await executePendingTransfers([], false);
       setExecResult(`Executed ${res.results.length} transfers. Errors: ${res.errors.length}`);
       await loadData();
     } catch (err) {
@@ -121,7 +121,7 @@ export default function PendingPage() {
                         )}
                         <div>
                           <div className="font-medium text-sm">
-                            #{op.id} — {op.client_name} → {op.counterparty_name}
+                            #{op.id} — {op.account_name || op.account_id} → {op.counterparty_holder_name}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {formatCLP(op.total_amount)} · {formatDate(op.created_at)}

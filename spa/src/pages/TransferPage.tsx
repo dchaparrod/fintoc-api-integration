@@ -5,36 +5,46 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { getClients, getCounterpartiesByClient, createTransferOperation } from "@/db/queries";
+import { createTransferOperation } from "@/db/queries";
+import { fetchAccounts, fetchCounterparties } from "@/services/api";
 import { formatCLP } from "@/lib/utils";
-import type { Client, ClientCounterparty } from "@/lib/types";
+import type { FintocAccount, FintocCounterparty } from "@/lib/types";
 import { Send, AlertTriangle, CheckCircle } from "lucide-react";
 
 const DAILY_LIMIT = 7_000_000;
 
 export default function TransferPage() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [counterparties, setCounterparties] = useState<ClientCounterparty[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [selectedCounterpartyId, setSelectedCounterpartyId] = useState<string>("");
+  const [accounts, setAccounts] = useState<FintocAccount[]>([]);
+  const [counterparties, setCounterparties] = useState<FintocCounterparty[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [selectedCounterpartyIdx, setSelectedCounterpartyIdx] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
   const [comment, setComment] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
-    getClients().then(setClients);
+    async function loadData() {
+      setDataLoading(true);
+      setDataError(null);
+      try {
+        const [accs, cps] = await Promise.all([fetchAccounts(), fetchCounterparties()]);
+        setAccounts(accs);
+        setCounterparties(cps);
+      } catch (err) {
+        setDataError(err instanceof Error ? err.message : "Failed to load Fintoc data. Is the backend running?");
+      } finally {
+        setDataLoading(false);
+      }
+    }
+    loadData();
   }, []);
 
-  useEffect(() => {
-    if (selectedClientId) {
-      getCounterpartiesByClient(Number(selectedClientId)).then(setCounterparties);
-      setSelectedCounterpartyId("");
-    } else {
-      setCounterparties([]);
-    }
-  }, [selectedClientId]);
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const selectedCounterparty = selectedCounterpartyIdx !== "" ? counterparties[Number(selectedCounterpartyIdx)] : null;
 
   const amountNum = Number(amount) || 0;
   const daysNeeded = amountNum > 0 ? Math.ceil(amountNum / DAILY_LIMIT) : 0;
@@ -42,19 +52,24 @@ export default function TransferPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedClientId || !selectedCounterpartyId || amountNum <= 0) return;
+    if (!selectedAccount || !selectedCounterparty || amountNum <= 0) return;
 
     setLoading(true);
     setResult(null);
 
     try {
-      const { operation, transactions } = await createTransferOperation(
-        Number(selectedClientId),
-        Number(selectedCounterpartyId),
-        amountNum,
+      const { operation, transactions } = await createTransferOperation({
+        accountId: selectedAccount.id,
+        accountName: selectedAccount.name || selectedAccount.id,
+        counterpartyHolderId: selectedCounterparty.holder_id || "",
+        counterpartyHolderName: selectedCounterparty.holder_name || "",
+        counterpartyAccountNumber: selectedCounterparty.account_number || "",
+        counterpartyAccountType: selectedCounterparty.account_type || "",
+        counterpartyInstitutionId: selectedCounterparty.institution_id || "",
+        totalAmount: amountNum,
         comment,
-        description
-      );
+        description,
+      });
 
       const txCount = transactions.length;
       const msg =
@@ -86,19 +101,27 @@ export default function TransferPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {dataError && (
+            <div className="mb-4 p-4 rounded-md bg-red-50 text-red-800 text-sm flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5" />
+              {dataError}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="client">Client</Label>
+              <Label htmlFor="account">Account (Origin)</Label>
               <Select
-                id="client"
-                value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
+                id="account"
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
                 required
+                disabled={dataLoading}
               >
-                <option value="">Select a client...</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.rut})
+                <option value="">{dataLoading ? "Loading accounts..." : "Select an account..."}</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name || a.id} ({a.currency})
                   </option>
                 ))}
               </Select>
@@ -108,14 +131,14 @@ export default function TransferPage() {
               <Label htmlFor="counterparty">Counterparty (Destination)</Label>
               <Select
                 id="counterparty"
-                value={selectedCounterpartyId}
-                onChange={(e) => setSelectedCounterpartyId(e.target.value)}
+                value={selectedCounterpartyIdx}
+                onChange={(e) => setSelectedCounterpartyIdx(e.target.value)}
                 required
-                disabled={!selectedClientId}
+                disabled={dataLoading}
               >
-                <option value="">Select a counterparty...</option>
-                {counterparties.map((cp) => (
-                  <option key={cp.id} value={cp.id}>
+                <option value="">{dataLoading ? "Loading counterparties..." : "Select a counterparty..."}</option>
+                {counterparties.map((cp, idx) => (
+                  <option key={cp.id || idx} value={idx}>
                     {cp.holder_name} — {cp.account_number} ({cp.institution_id})
                   </option>
                 ))}
@@ -169,7 +192,7 @@ export default function TransferPage() {
               />
             </div>
 
-            <Button type="submit" disabled={loading || !selectedClientId || !selectedCounterpartyId || amountNum <= 0} className="w-full">
+            <Button type="submit" disabled={loading || !selectedAccount || !selectedCounterparty || amountNum <= 0} className="w-full">
               {loading ? "Creating..." : "Create Transfer Operation"}
             </Button>
           </form>

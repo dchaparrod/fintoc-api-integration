@@ -1,4 +1,40 @@
+import type { FintocAccount, FintocCounterparty, Institution } from "@/lib/types";
+
 const API_BASE = "/api";
+
+// ── HTTP helpers ─────────────────────────────────────────
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(body.detail || `HTTP ${response.status}: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ── Fintoc Data (accounts, counterparties, institutions) ─
+
+export async function fetchAccounts(): Promise<FintocAccount[]> {
+  const response = await fetch(`${API_BASE}/accounts`);
+  return handleResponse<FintocAccount[]>(response);
+}
+
+export async function fetchAccount(accountId: string): Promise<FintocAccount> {
+  const response = await fetch(`${API_BASE}/accounts/${accountId}`);
+  return handleResponse<FintocAccount>(response);
+}
+
+export async function fetchCounterparties(): Promise<FintocCounterparty[]> {
+  const response = await fetch(`${API_BASE}/counterparties`);
+  return handleResponse<FintocCounterparty[]>(response);
+}
+
+export async function fetchInstitutions(): Promise<Institution[]> {
+  const response = await fetch(`${API_BASE}/institutions`);
+  return handleResponse<Institution[]>(response);
+}
+
+// ── Transfers ────────────────────────────────────────────
 
 export interface TransferRequest {
   client_id: number;
@@ -25,19 +61,6 @@ export interface TransferResponse {
   error?: string;
 }
 
-export interface ApiError {
-  detail: string;
-  status_code: number;
-}
-
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(body.detail || `HTTP ${response.status}: ${response.statusText}`);
-  }
-  return response.json();
-}
-
 export async function executeTransfer(req: TransferRequest): Promise<TransferResponse> {
   const response = await fetch(`${API_BASE}/transfer`, {
     method: "POST",
@@ -47,9 +70,14 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
   return handleResponse<TransferResponse>(response);
 }
 
-export async function executePendingTransfers(simulate: boolean = false): Promise<{ results: TransferResponse[]; errors: string[] }> {
+export async function executePendingTransfers(
+  payload: object[],
+  simulate: boolean = false
+): Promise<{ results: TransferResponse[]; errors: string[] }> {
   const response = await fetch(`${API_BASE}/transfer-pending?simulate=${simulate}`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   return handleResponse(response);
 }
