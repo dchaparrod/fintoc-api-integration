@@ -4,31 +4,24 @@ import os
 import uuid
 from pathlib import Path
 
-import httpx
 from fintoc import Fintoc
 from fintoc.errors import FintocError
 
-from .jws import generate_jws_signature_header
 from .schemas import TransferRequest, TransferResponse
 
 logger = logging.getLogger(__name__)
 
 FINTOC_API_KEY = os.getenv("FINTOC_API_KEY", "")
-FINTOC_BASE_URL = "https://api.fintoc.com"
+FINTOC_PRIVATE_KEY_PATH = os.getenv("FINTOC_PRIVATE_KEY_PATH", "")
 
 INSTITUTIONS_PATH = Path(__file__).parent / "institutions.json"
 
 
 def _get_client() -> Fintoc:
-    return Fintoc(FINTOC_API_KEY)
-
-
-def _api_headers() -> dict[str, str]:
-    return {
-        "Authorization": FINTOC_API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    kwargs: dict = {}
+    if FINTOC_PRIVATE_KEY_PATH:
+        kwargs["jws_private_key"] = FINTOC_PRIVATE_KEY_PATH
+    return Fintoc(FINTOC_API_KEY, **kwargs)
 
 
 # ── Institutions (hardcoded) ─────────────────────────────
@@ -56,7 +49,7 @@ def list_accounts() -> list[dict]:
     """Fetch all active accounts from Fintoc."""
     try:
         client = _get_client()
-        accounts = client.v2.accounts.all(status="active")
+        accounts = client.v2.accounts.list(status="active", lazy=False)
         return [_serialize_account(acc) for acc in accounts]
     except FintocError as e:
         logger.error("Failed to list accounts: %s", str(e))
@@ -82,19 +75,15 @@ def get_account(account_id: str) -> dict:
 def simulate_receive_transfer(account_number_id: str, amount: int, currency: str = "CLP") -> dict:
     """Simulate receiving an inbound transfer to fund a test account."""
     try:
-        resp = httpx.post(
-            f"{FINTOC_BASE_URL}/v1/simulate/receive-transfer",
-            headers=_api_headers(),
-            json={
-                "account_number_id": account_number_id,
-                "amount": amount,
-                "currency": currency,
-            },
+        client = _get_client()
+        transfer = client.v2.simulate.receive_transfer(
+            account_number_id=account_number_id,
+            amount=amount,
+            currency=currency,
         )
-        resp.raise_for_status()
-        return resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.error("Failed to simulate receive transfer: %s %s", e.response.status_code, e.response.text)
+        return transfer.serialize()
+    except FintocError as e:
+        logger.error("Failed to simulate receive transfer: %s", str(e))
         raise
     except Exception as e:
         logger.error("Unexpected error simulating receive transfer: %s", str(e))
@@ -128,28 +117,6 @@ def execute_transfer(
 
     try:
         client = _get_client()
-
-        body = {
-            "amount": req.amount,
-            "currency": req.currency,
-            "account_id": req.account_id,
-            "comment": req.comment,
-            "counterparty": {
-                "holder_id": req.counterparty.holder_id,
-                "holder_name": req.counterparty.holder_name,
-                "account_number": req.counterparty.account_number,
-                "account_type": req.counterparty.account_type,
-                "institution_id": req.counterparty.institution_id,
-            },
-        }
-        if req.metadata:
-            body["metadata"] = req.metadata
-
-        raw_body = json.dumps(body)
-        # JWS signature for Fintoc-JWS-Signature header
-        # Note: The SDK handles headers internally; this is generated
-        # for manual/curl usage or future custom HTTP calls.
-        _jws_signature = generate_jws_signature_header(raw_body)  # noqa: F841
 
         logger.info(
             "Executing transfer: %s %s to %s",
