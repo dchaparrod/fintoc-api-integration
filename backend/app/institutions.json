@@ -1,0 +1,23 @@
+[
+  {"name": "Banco Estado", "id": "cl_banco_estado"},
+  {"name": "Banco BCI", "id": "cl_banco_bci"},
+  {"name": "Banco BICE", "id": "cl_banco_bice"},
+  {"name": "Banco de Chile - Edwards - Citi", "id": "cl_banco_de_chile"},
+  {"name": "Banco Falabella", "id": "cl_banco_falabella"},
+  {"name": "Banco Itaú", "id": "cl_banco_itau"},
+  {"name": "Banco Ripley", "id": "cl_banco_ripley"},
+  {"name": "Banco Santander", "id": "cl_banco_santander"},
+  {"name": "Banco Consorcio", "id": "cl_banco_consorcio"},
+  {"name": "Scotiabank", "id": "cl_banco_scotiabank"},
+  {"name": "Mercado Pago", "id": "cl_mercado_pago"},
+  {"name": "Mach", "id": "cl_mach"},
+  {"name": "Tenpo", "id": "cl_tenpo"},
+  {"name": "Banco Security", "id": "cl_banco_security"},
+  {"name": "Tapp", "id": "cl_tapp_caja_los_andes"},
+  {"name": "Banco Internacional", "id": "cl_banco_internacional"},
+  {"name": "Coopeuch - Dale", "id": "cl_banco_coopeuch"},
+  {"name": "Copec Pay", "id": "cl_copec_pay"},
+  {"name": "Prepago Los Heroes", "id": "cl_prepago_los_heroes"},
+  {"name": "BBVA", "id": "cl_banco_bbva"},
+  {"name": "HSBC", "id": "cl_banco_hsbc"}
+]
