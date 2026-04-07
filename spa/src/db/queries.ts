@@ -99,13 +99,23 @@ export async function getOperationsWithDetails(): Promise<OperationWithDetails[]
   return operations;
 }
 
+export interface PendingTransactionRow extends Transaction {
+  account_id: string;
+  counterparty_holder_id: string;
+  counterparty_holder_name: string;
+  counterparty_account_number: string;
+  counterparty_account_type: string;
+  counterparty_institution_id: string;
+  comment: string;
+}
+
 export async function getPendingTransactionsByAccount(
   accountId: string,
   date?: string
-): Promise<(Transaction & { account_id: string; counterparty_holder_id: string; counterparty_holder_name: string; counterparty_account_number: string; counterparty_account_type: string; counterparty_institution_id: string; comment: string })[]> {
+): Promise<PendingTransactionRow[]> {
   const db = await getDb();
   const targetDate = date || new Date().toISOString().split("T")[0];
-  const res = await db.query(
+  const res = await db.query<PendingTransactionRow>(
     `SELECT t.*, op.account_id, op.counterparty_holder_id, op.counterparty_holder_name,
             op.counterparty_account_number, op.counterparty_account_type,
             op.counterparty_institution_id, op.comment
@@ -117,7 +127,7 @@ export async function getPendingTransactionsByAccount(
      ORDER BY t.scheduled_date, t.id`,
     [accountId, targetDate]
   );
-  return res.rows as any;
+  return res.rows;
 }
 
 export async function updateTransactionStatus(
