@@ -4,20 +4,21 @@ import os
 import uuid
 from pathlib import Path
 
-import fintoc
+from fintoc import Fintoc
+from fintoc.errors import FintocError
 
 from .jws import generate_jws_signature_header
 from .schemas import TransferRequest, TransferResponse
 
 logger = logging.getLogger(__name__)
 
-FINTOC_API_KEY = os.getenv("FINTOC_API_KEY", "sk_test_9c8d8CeyBTx1VcJzuDgpm4H")
+FINTOC_API_KEY = os.getenv("FINTOC_API_KEY", "")
 
 INSTITUTIONS_PATH = Path(__file__).parent / "institutions.json"
 
 
-def _get_client() -> fintoc.Client:
-    return fintoc.Client(FINTOC_API_KEY)
+def _get_client() -> Fintoc:
+    return Fintoc(FINTOC_API_KEY)
 
 
 # ── Institutions (hardcoded) ─────────────────────────────
@@ -46,7 +47,7 @@ def list_accounts() -> list[dict]:
             }
             for acc in accounts
         ]
-    except fintoc.errors.FintocError as e:
+    except FintocError as e:
         logger.error("Failed to list accounts: %s", str(e))
         raise
     except Exception as e:
@@ -67,7 +68,7 @@ def get_account(account_id: str) -> dict:
             "status": getattr(acc, "status", None),
             "type": getattr(acc, "type", None),
         }
-    except fintoc.errors.FintocError as e:
+    except FintocError as e:
         logger.error("Failed to get account %s: %s", account_id, str(e))
         raise
 
@@ -90,7 +91,7 @@ def list_counterparties() -> list[dict]:
             }
             for cp in counterparties
         ]
-    except fintoc.errors.FintocError as e:
+    except FintocError as e:
         logger.error("Failed to list counterparties: %s", str(e))
         raise
 
@@ -173,7 +174,7 @@ def execute_transfer(
             currency=transfer.currency,
         )
 
-    except fintoc.errors.FintocError as e:
+    except FintocError as e:
         logger.error("Fintoc API error: %s", str(e))
         return TransferResponse(
             id="",

@@ -1,15 +1,37 @@
 #!/bin/bash
 set -e
 
-IMAGE_NAME="fintoc-backend"
-TAG="${1:-latest}"
+COMMAND="${1:-up}"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "Building Docker image: ${IMAGE_NAME}:${TAG}"
-docker build -t "${IMAGE_NAME}:${TAG}" .
-
-echo ""
-echo "Done. Run with:"
-echo "  docker run -p 8000:8000 \\"
-echo "    -e FINTOC_API_KEY=sk_test_... \\"
-echo "    -v ~/.ssh/fintoc_private.pem:/app/private_key.pem:ro \\"
-echo "    ${IMAGE_NAME}:${TAG}"
+case "$COMMAND" in
+  build)
+    echo "Building Docker image..."
+    docker compose -f "$PROJECT_ROOT/docker-compose.yml" build
+    ;;
+  up)
+    echo "Starting backend (docker compose up)..."
+    docker compose -f "$PROJECT_ROOT/docker-compose.yml" up --build
+    ;;
+  up-d)
+    echo "Starting backend (detached)..."
+    docker compose -f "$PROJECT_ROOT/docker-compose.yml" up --build -d
+    ;;
+  down)
+    echo "Stopping backend..."
+    docker compose -f "$PROJECT_ROOT/docker-compose.yml" down
+    ;;
+  logs)
+    docker compose -f "$PROJECT_ROOT/docker-compose.yml" logs -f backend
+    ;;
+  *)
+    echo "Usage: ./build.sh [build|up|up-d|down|logs]"
+    echo ""
+    echo "  build   Build the Docker image only"
+    echo "  up      Build & start (foreground, default)"
+    echo "  up-d    Build & start (detached)"
+    echo "  down    Stop containers"
+    echo "  logs    Tail backend logs"
+    exit 1
+    ;;
+esac
