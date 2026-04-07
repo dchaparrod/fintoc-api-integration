@@ -7,6 +7,8 @@ export interface FintocAccount {
   balance: number | null;
   status: string | null;
   type: string | null;
+  root_account_number: string | null;
+  root_account_number_id: string | null;
 }
 
 export interface Institution {

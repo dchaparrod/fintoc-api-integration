@@ -35,13 +35,16 @@ def get_institutions() -> list[dict]:
 # ── Accounts (from Fintoc SDK) ───────────────────────────
 
 def _serialize_account(acc: object) -> dict:
+    entity = getattr(acc, "entity", None)
     return {
         "id": getattr(acc, "id", None),
-        "name": getattr(acc, "name", None),
+        "name": getattr(entity, "holder_name", None) if entity else None,
         "currency": getattr(acc, "currency", "clp"),
-        "balance": getattr(acc, "balance", None),
+        "balance": getattr(acc, "available_balance", None),
         "status": getattr(acc, "status", None),
         "type": getattr(acc, "type", None),
+        "root_account_number": getattr(acc, "root_account_number", None),
+        "root_account_number_id": getattr(acc, "root_account_number_id", None),
     }
 
 
