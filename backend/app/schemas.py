@@ -2,6 +2,8 @@ from pydantic import BaseModel
 from typing import Optional
 
 
+# ── Counterparty ──────────────────────────────────────────
+
 class CounterpartyRequest(BaseModel):
     holder_id: str
     holder_name: str
@@ -9,6 +11,16 @@ class CounterpartyRequest(BaseModel):
     account_type: str
     institution_id: str
 
+
+class CreateCounterpartyRequest(BaseModel):
+    holder_id: str
+    holder_name: str
+    institution_id: str
+    account_number: str
+    account_type: Optional[str] = None
+
+
+# ── Transfer ─────────────────────────────────────────────
 
 class TransferRequest(BaseModel):
     client_id: int

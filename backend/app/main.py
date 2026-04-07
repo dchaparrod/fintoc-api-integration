@@ -3,12 +3,15 @@ import logging
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from .schemas import TransferRequest, TransferResponse, ExecutionResult
+from .schemas import TransferRequest, TransferResponse, ExecutionResult, CreateCounterpartyRequest
 from .fintoc_client import (
     execute_transfer,
     list_accounts,
     get_account,
     list_counterparties,
+    get_counterparty,
+    create_counterparty,
+    delete_counterparty,
     get_institutions,
 )
 from .transfer_pending import process_pending_transactions, build_pending_list_from_payload
@@ -63,6 +66,34 @@ async def api_list_counterparties():
     """List all Fintoc counterparties."""
     try:
         return list_counterparties()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/counterparties/{counterparty_id}")
+async def api_get_counterparty(counterparty_id: str):
+    """Get a single Fintoc counterparty by ID."""
+    try:
+        return get_counterparty(counterparty_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/counterparties")
+async def api_create_counterparty(req: CreateCounterpartyRequest):
+    """Create a new counterparty in Fintoc."""
+    try:
+        return create_counterparty(req)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.delete("/api/counterparties/{counterparty_id}")
+async def api_delete_counterparty(counterparty_id: str):
+    """Delete a counterparty from Fintoc."""
+    try:
+        delete_counterparty(counterparty_id)
+        return {"status": "deleted"}
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 

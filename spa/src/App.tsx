@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import TransferPage from "@/pages/TransferPage";
 import PendingPage from "@/pages/PendingPage";
-import { Send, ClipboardList } from "lucide-react";
+import CounterpartiesPage from "@/pages/CounterpartiesPage";
+import { Send, ClipboardList, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
@@ -34,6 +35,10 @@ function App() {
                 <Send className="h-4 w-4" />
                 Transfer
               </NavItem>
+              <NavItem to="/counterparties">
+                <Users className="h-4 w-4" />
+                Counterparties
+              </NavItem>
               <NavItem to="/pending">
                 <ClipboardList className="h-4 w-4" />
                 Pending
@@ -44,6 +49,7 @@ function App() {
         <main className="max-w-5xl mx-auto px-6 py-8">
           <Routes>
             <Route path="/" element={<TransferPage />} />
+            <Route path="/counterparties" element={<CounterpartiesPage />} />
             <Route path="/pending" element={<PendingPage />} />
           </Routes>
         </main>

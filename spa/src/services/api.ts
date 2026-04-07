@@ -29,6 +29,33 @@ export async function fetchCounterparties(): Promise<FintocCounterparty[]> {
   return handleResponse<FintocCounterparty[]>(response);
 }
 
+export interface CreateCounterpartyPayload {
+  holder_id: string;
+  holder_name: string;
+  institution_id: string;
+  account_number: string;
+  account_type?: string;
+}
+
+export async function createCounterparty(data: CreateCounterpartyPayload): Promise<FintocCounterparty> {
+  const response = await fetch(`${API_BASE}/counterparties`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<FintocCounterparty>(response);
+}
+
+export async function deleteCounterparty(counterpartyId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/counterparties/${counterpartyId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(body.detail || `HTTP ${response.status}`);
+  }
+}
+
 export async function fetchInstitutions(): Promise<Institution[]> {
   const response = await fetch(`${API_BASE}/institutions`);
   return handleResponse<Institution[]>(response);

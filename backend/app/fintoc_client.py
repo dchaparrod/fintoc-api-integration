@@ -4,21 +4,31 @@ import os
 import uuid
 from pathlib import Path
 
+import httpx
 from fintoc import Fintoc
 from fintoc.errors import FintocError
 
 from .jws import generate_jws_signature_header
-from .schemas import TransferRequest, TransferResponse
+from .schemas import CreateCounterpartyRequest, TransferRequest, TransferResponse
 
 logger = logging.getLogger(__name__)
 
 FINTOC_API_KEY = os.getenv("FINTOC_API_KEY", "")
+FINTOC_BASE_URL = "https://api.fintoc.com"
 
 INSTITUTIONS_PATH = Path(__file__).parent / "institutions.json"
 
 
 def _get_client() -> Fintoc:
     return Fintoc(FINTOC_API_KEY)
+
+
+def _api_headers() -> dict[str, str]:
+    return {
+        "Authorization": FINTOC_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
 
 
 # ── Institutions (hardcoded) ─────────────────────────────
@@ -29,24 +39,25 @@ def get_institutions() -> list[dict]:
         return json.load(f)
 
 
-# ── Accounts (from Fintoc API) ───────────────────────────
+# ── Accounts (from Fintoc SDK) ───────────────────────────
+
+def _serialize_account(acc: object) -> dict:
+    return {
+        "id": getattr(acc, "id", None),
+        "name": getattr(acc, "name", None),
+        "currency": getattr(acc, "currency", "clp"),
+        "balance": getattr(acc, "balance", None),
+        "status": getattr(acc, "status", None),
+        "type": getattr(acc, "type", None),
+    }
+
 
 def list_accounts() -> list[dict]:
     """Fetch all active accounts from Fintoc."""
     try:
         client = _get_client()
         accounts = client.v2.accounts.all(status="active")
-        return [
-            {
-                "id": acc.id,
-                "name": getattr(acc, "name", None),
-                "currency": getattr(acc, "currency", "clp"),
-                "balance": getattr(acc, "balance", None),
-                "status": getattr(acc, "status", None),
-                "type": getattr(acc, "type", None),
-            }
-            for acc in accounts
-        ]
+        return [_serialize_account(acc) for acc in accounts]
     except FintocError as e:
         logger.error("Failed to list accounts: %s", str(e))
         raise
@@ -60,39 +71,79 @@ def get_account(account_id: str) -> dict:
     try:
         client = _get_client()
         acc = client.v2.accounts.get(account_id)
-        return {
-            "id": acc.id,
-            "name": getattr(acc, "name", None),
-            "currency": getattr(acc, "currency", "clp"),
-            "balance": getattr(acc, "balance", None),
-            "status": getattr(acc, "status", None),
-            "type": getattr(acc, "type", None),
-        }
+        return _serialize_account(acc)
     except FintocError as e:
         logger.error("Failed to get account %s: %s", account_id, str(e))
         raise
 
 
-# ── Counterparties (from Fintoc API) ─────────────────────
+# ── Counterparties (direct HTTP — not in SDK) ────────────
 
 def list_counterparties() -> list[dict]:
     """Fetch all counterparties from Fintoc."""
     try:
-        client = _get_client()
-        counterparties = client.v2.counterparties.all()
-        return [
-            {
-                "id": getattr(cp, "id", None),
-                "holder_id": getattr(cp, "holder_id", None),
-                "holder_name": getattr(cp, "holder_name", None),
-                "account_number": getattr(cp, "account_number", None),
-                "account_type": getattr(cp, "account_type", None),
-                "institution_id": getattr(cp, "institution_id", None),
-            }
-            for cp in counterparties
-        ]
-    except FintocError as e:
-        logger.error("Failed to list counterparties: %s", str(e))
+        resp = httpx.get(
+            f"{FINTOC_BASE_URL}/v1/counterparties",
+            headers=_api_headers(),
+            params={"per_page": 300},
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Failed to list counterparties: %s %s", e.response.status_code, e.response.text)
+        raise
+    except Exception as e:
+        logger.error("Unexpected error listing counterparties: %s", str(e))
+        raise
+
+
+def get_counterparty(counterparty_id: str) -> dict:
+    """Retrieve a single counterparty by ID."""
+    try:
+        resp = httpx.get(
+            f"{FINTOC_BASE_URL}/v1/counterparties/{counterparty_id}",
+            headers=_api_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Failed to get counterparty %s: %s", counterparty_id, e.response.text)
+        raise
+
+
+def create_counterparty(data: CreateCounterpartyRequest) -> dict:
+    """Create a new counterparty via Fintoc API."""
+    body = {
+        "holder_id": data.holder_id,
+        "holder_name": data.holder_name,
+        "institution_id": data.institution_id,
+        "account_number": data.account_number,
+    }
+    if data.account_type:
+        body["account_type"] = data.account_type
+    try:
+        resp = httpx.post(
+            f"{FINTOC_BASE_URL}/v1/counterparties",
+            headers=_api_headers(),
+            json=body,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Failed to create counterparty: %s %s", e.response.status_code, e.response.text)
+        raise
+
+
+def delete_counterparty(counterparty_id: str) -> None:
+    """Delete a counterparty by ID."""
+    try:
+        resp = httpx.delete(
+            f"{FINTOC_BASE_URL}/v1/counterparties/{counterparty_id}",
+            headers=_api_headers(),
+        )
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.error("Failed to delete counterparty %s: %s", counterparty_id, e.response.text)
         raise
 
 
