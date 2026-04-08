@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 FINTOC_API_KEY = os.getenv("FINTOC_API_KEY", "")
 FINTOC_PRIVATE_KEY_PATH = os.getenv("FINTOC_PRIVATE_KEY_PATH", "")
 
-INSTITUTIONS_PATH = Path(__file__).parent / "institutions.json"
+INSTITUTIONS_PATH = Path(__file__).parent / "data" / "institutions.json"
 
 
 def _get_client() -> Fintoc:

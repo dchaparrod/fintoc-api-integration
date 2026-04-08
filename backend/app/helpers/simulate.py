@@ -11,8 +11,8 @@ import uuid
 from datetime import date, timedelta
 from dataclasses import dataclass, field
 
-from .schemas import TransferRequest, CounterpartyRequest, TransferResponse
-from .fintoc_client import execute_transfer
+from ..schemas import TransferRequest, CounterpartyRequest, TransferResponse
+from ..fintoc_client import execute_transfer
 
 logger = logging.getLogger(__name__)
 

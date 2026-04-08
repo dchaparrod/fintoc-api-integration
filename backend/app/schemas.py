@@ -1,7 +1,7 @@
 from pydantic import BaseModel, field_validator
 from typing import Optional
 
-from .rut import is_valid_rut, clean_rut
+from .helpers.rut import is_valid_rut, clean_rut
 
 
 # ── Counterparty ──────────────────────────────────────────

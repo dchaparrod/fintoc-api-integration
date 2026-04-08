@@ -25,7 +25,7 @@ from .fintoc_client import (
     get_institutions,
     simulate_receive_transfer,
 )
-from .simulate import simulate_split
+from .helpers.simulate import simulate_split
 from .transfer_pending import process_pending_transactions, build_pending_list_from_payload
 from .webhooks import handle_webhook_event, get_webhook_events
 

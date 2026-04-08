@@ -24,7 +24,7 @@ def poll_webhook_simulator(self):
     if APP_ENV != "development":
         return {"skipped": True, "reason": "not in development mode"}
 
-    from .webhook_simulator import poll_and_inject
+    from .helpers.webhook_simulator import poll_and_inject
     return poll_and_inject()
 
 

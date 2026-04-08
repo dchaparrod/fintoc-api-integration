@@ -3,18 +3,18 @@
 CLI tool to export succeeded transfers from the webhook event store to CSV.
 
 Usage (from repo root):
-    docker compose exec backend python -m app.export_csv
-    docker compose exec backend python -m app.export_csv --output /tmp/report.csv
+    docker compose exec backend python -m app.helpers.export_csv
+    docker compose exec backend python -m app.helpers.export_csv --output /tmp/report.csv
 
 Without Docker:
-    cd backend && python -m app.export_csv
+    cd backend && python -m app.helpers.export_csv
 """
 
 import argparse
 import csv
 import sys
 
-from .webhooks import get_webhook_events
+from ..webhooks import get_webhook_events
 
 CSV_HEADERS = [
     "event_id",
