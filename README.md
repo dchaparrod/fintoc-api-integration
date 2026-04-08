@@ -9,13 +9,16 @@ Automate outbound transfers via the Fintoc API. Amounts exceeding the daily limi
 - **Celery daily worker** — `celery-beat` triggers `process_daily_pending` at 09:00 CLT; transactions can also be enqueued on-demand via API
 - **Task polling** — enqueue pending transactions (`POST /api/tasks/process-pending`) and poll status (`GET /api/tasks/{id}/status`)
 - **Webhook ingestion** — `POST /api/webhooks/fintoc` receives Fintoc `transfer.*` events, validates signature, stores in-memory
-- **Webhook → PGlite sync** — SPA polls `GET /api/webhook-events` every 10 s and updates local transaction/operation statuses
+- **Webhook simulator (dev)** — when `APP_ENV=development`, the backend polls Fintoc for transfer status changes every 10 s and injects synthetic webhook events automatically — no public URL or ngrok required
+- **Webhook → PGlite sync** — SPA polls `GET /api/webhook-events` every 5 s and updates local transaction/operation statuses in real time
+- **RUT validation** — Chilean RUT (holder_id) validated with modulo-11 check digit in both the SPA form and backend Pydantic schema
 - **CSV export (SPA)** — "Export CSV" button on the Pending page downloads all succeeded transactions with full operation details
 - **CSV export (CLI)** — `docker compose exec backend python -m app.export_csv` dumps succeeded webhook events to stdout or file
 - **Counterparty address book** — save, list, and delete counterparties in PGlite
 - **Simulate receive transfer** — fund test accounts via `POST /api/simulate/receive-transfer`
 - **Simulate split** — preview split plan via `POST /api/simulate/split-transfer`
 - **Seed account workflow** — `.windsurf/workflows/seed-account.md` documents how to fund a test account
+- **Full setup workflow** — `.windsurf/workflows/setup.md` builds, seeds, and starts the entire stack with a single command
 
 ## Architecture
 
@@ -75,6 +78,8 @@ fintoc-api-integration/
 │   │   ├── tasks.py                  # process_daily_pending task
 │   │   ├── fintoc_client.py          # Fintoc SDK wrapper
 │   │   ├── webhooks.py               # Webhook event handler + in-memory store
+│   │   ├── webhook_simulator.py      # Dev-only: polls Fintoc, injects synthetic webhook events
+│   │   ├── rut.py                    # Chilean RUT validation + formatting
 │   │   ├── simulate.py               # Multi-day split simulation
 │   │   ├── transfer_pending.py       # Daily batch executor per account
 │   │   ├── export_csv.py             # CLI: export succeeded events to CSV
@@ -84,7 +89,7 @@ fintoc-api-integration/
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── docker-compose.yml                # backend, redis, celery-worker, celery-beat
-├── .windsurf/workflows/              # Reusable workflows (seed-account)
+├── .windsurf/workflows/              # Reusable workflows (setup, seed-account)
 ├── plans/                            # Implementation plans
 ├── .env.example
 └── README.md
@@ -101,11 +106,11 @@ cp .env.example .env
 Add your secrets to `.env`:
 
 ```env
-FINTOC_API_KEY=sk_test_...
 APP_ENV=development
-FINTC_API_KEY_PATH=/path/to/your/fintoc-api-key.pem
-FINTOC_WEBHOOK_SECRET=whsec_...
-FINTOC_WEBHOOK_URL=https://webhook.site/your-unique-id
+FINTOC_API_KEY=sk_test_...
+FINTOC_PRIVATE_KEY_PATH=/path/to/your/fintoc_private.pem
+FINTOC_WEBHOOK_SECRET=              # required in production, optional in development
+FINTOC_WEBHOOK_URL=                  # your registered webhook URL (production)
 ```
 
 ### 2. Backend + Celery + Redis (Docker Compose)
@@ -146,10 +151,16 @@ curl -s -X POST http://localhost:8000/api/simulate/receive-transfer \
 
 Or run `/seed-account` in Windsurf. See `.windsurf/workflows/seed-account.md`.
 
-### 5. Webhook testing (dev)
+### 5. Webhook status sync
 
-Register your `FINTOC_WEBHOOK_URL` in the Fintoc dashboard for `transfer.*` events.
-For local development, use [webhook.site](https://webhook.site) or ngrok to expose the backend.
+The backend uses `APP_ENV` to determine how transfer status updates are received:
+
+| `APP_ENV` | Behavior |
+|-----------|----------|
+| `development` | **Webhook simulator** runs automatically — polls Fintoc every 10 s for outbound transfer status changes, injects synthetic `transfer.succeeded` / `transfer.failed` events into the in-memory store. No public URL needed. |
+| `production` | Real webhooks via `POST /api/webhooks/fintoc`. Register `FINTOC_WEBHOOK_URL` in the Fintoc dashboard for `transfer.*` events. `FINTOC_WEBHOOK_SECRET` and `FINTOC_API_KEY` are **required** — the server refuses to start without them. |
+
+The SPA polls `GET /api/webhook-events` every 5 seconds and updates PGlite transaction/operation statuses automatically. The Pending page refreshes in real time when changes are detected.
 
 ### 6. Export CSV
 
@@ -196,7 +207,10 @@ Accounts and counterparties come from the Fintoc API. Only the following are sto
 - **Auto-splitting**: amounts above the limit are split into N transactions on consecutive business days
 - **Execution plan preview**: users review day-by-day breakdown before confirming a multi-day operation
 - **Celery + Redis**: async task processing with daily beat schedule and on-demand enqueue
-- **Webhook sync**: backend stores events in-memory; SPA polls every 10 s and updates PGlite
+- **Webhook sync**: backend stores events in-memory; SPA polls every 5 s and updates PGlite
+- **Dev webhook simulator**: `APP_ENV=development` enables automatic polling of Fintoc transfer statuses — no ngrok or public URL needed
+- **Production guard**: `APP_ENV=production` requires `FINTOC_WEBHOOK_SECRET` and `FINTOC_API_KEY` or the server exits on startup
+- **RUT validation**: modulo-11 check digit enforced in SPA (live feedback) and backend (Pydantic field validator)
 - **JWS signing**: private key at `~/.ssh/fintoc_private.pem`, passed to Fintoc SDK automatically
 - **Simulate flag**: all transfer functions accept `simulate=True` for dry-run testing
 - **Idempotency**: UUID v4 per transaction, stored in DB to prevent double-execution
