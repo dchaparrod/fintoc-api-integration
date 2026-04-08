@@ -41,8 +41,8 @@ export function isValidRut(rut: string): boolean {
   const body = clean.slice(0, -1);
   const dv = clean.slice(-1);
 
-  // Body must be all digits, 1-8 digits
-  if (!/^\d{1,8}$/.test(body)) return false;
+  // Body must be all digits, 1-9 digits (9 for company RUTs like 71.480.129-4)
+  if (!/^\d{1,9}$/.test(body)) return false;
 
   return computeCheckDigit(body) === dv;
 }

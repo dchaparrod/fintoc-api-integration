@@ -38,7 +38,7 @@ def is_valid_rut(rut: str) -> bool:
     body = clean[:-1]
     dv = clean[-1]
 
-    if not re.match(r"^\d{1,8}$", body):
+    if not re.match(r"^\d{1,9}$", body):
         return False
 
     return compute_check_digit(body) == dv
