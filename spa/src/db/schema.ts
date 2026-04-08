@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   transfer_operation_id INTEGER NOT NULL REFERENCES transfer_operations(id),
   amount INTEGER NOT NULL,
   scheduled_date DATE NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'pending_confirmation', 'succeeded', 'failed', 'rejected')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'succeeded', 'failed', 'rejected', 'returned', 'return_pending')),
   fintoc_transfer_id TEXT,
   idempotency_key TEXT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -147,7 +147,7 @@ BEGIN
   ) THEN
     ALTER TABLE transactions DROP CONSTRAINT transactions_status_check;
     ALTER TABLE transactions ADD CONSTRAINT transactions_status_check
-      CHECK (status IN ('pending', 'processing', 'pending_confirmation', 'succeeded', 'failed', 'rejected'));
+      CHECK (status IN ('pending', 'succeeded', 'failed', 'rejected', 'returned', 'return_pending'));
   END IF;
 END $$;
 `;

@@ -18,11 +18,11 @@ const statusVariant: Record<OperationStatus, "default" | "warning" | "success" |
 
 const txStatusVariant: Record<TransactionStatus, "default" | "warning" | "success" | "destructive" | "secondary"> = {
   pending: "warning",
-  processing: "default",
-  pending_confirmation: "default",
   succeeded: "success",
   failed: "destructive",
   rejected: "destructive",
+  returned: "secondary",
+  return_pending: "warning",
 };
 
 export default function PendingPage() {

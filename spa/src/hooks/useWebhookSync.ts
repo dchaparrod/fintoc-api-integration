@@ -79,10 +79,13 @@ export function useWebhookSync(enabled: boolean = true) {
 function mapEventStatus(eventType: string): string | null {
   switch (eventType) {
     case "transfer.succeeded":
+    case "transfer.outbound.succeeded":
       return "succeeded";
     case "transfer.failed":
+    case "transfer.outbound.failed":
       return "failed";
     case "transfer.rejected":
+    case "transfer.outbound.rejected":
       return "rejected";
     default:
       return null;
@@ -103,13 +106,13 @@ async function checkAndUpdateOperation(operationId: number) {
 
   // All done?
   const allResolved = statuses.every((s) =>
-    ["succeeded", "failed", "rejected"].includes(s)
+    ["succeeded", "failed", "rejected", "returned"].includes(s)
   );
 
   if (!allResolved) return;
 
-  // If any failed/rejected, operation is failed; otherwise completed
-  const hasFailed = statuses.some((s) => s === "failed" || s === "rejected");
+  // If any failed/rejected/returned, operation is failed; otherwise completed
+  const hasFailed = statuses.some((s) => ["failed", "rejected", "returned"].includes(s));
   const newStatus = hasFailed ? "failed" : "completed";
 
   await updateOperationStatus(operationId, newStatus);
