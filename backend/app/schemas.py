@@ -1,5 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
+
+from .rut import is_valid_rut, clean_rut
 
 
 # ── Counterparty ──────────────────────────────────────────
@@ -10,6 +12,14 @@ class CounterpartyRequest(BaseModel):
     account_number: str
     account_type: str
     institution_id: str
+
+    @field_validator("holder_id")
+    @classmethod
+    def validate_rut(cls, v: str) -> str:
+        cleaned = clean_rut(v)
+        if not is_valid_rut(cleaned):
+            raise ValueError(f"Invalid RUT: {v}")
+        return cleaned
 
 
 # ── Transfer ─────────────────────────────────────────────

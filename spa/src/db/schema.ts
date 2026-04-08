@@ -39,24 +39,28 @@ CREATE TABLE IF NOT EXISTS transactions (
 `;
 
 export const SEED_SQL = `
--- ── Saved Counterparties (address book) ──
+-- ── Saved Counterparties (address book) — all RUTs validated ──
+-- 77.143.385-5
 INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
 SELECT '771433855', 'Piped Piper SpA', '502955923', 'checking_account', 'cl_banco_de_chile'
 WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '771433855');
 
+-- 12.345.678-5
 INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
-SELECT '123456789', 'Hooli Inc', '301234567', 'checking_account', 'cl_banco_santander'
-WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '123456789');
+SELECT '123456785', 'Hooli Inc', '301234567', 'checking_account', 'cl_banco_santander'
+WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '123456785');
 
+-- 98.765.432-5
 INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
-SELECT '987654321', 'Raviga Capital', '701987654', 'sight_account', 'cl_banco_estado'
-WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '987654321');
+SELECT '987654325', 'Raviga Capital', '701987654', 'sight_account', 'cl_banco_estado'
+WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '987654325');
 
+-- 45.678.901-3
 INSERT INTO saved_counterparties (holder_id, holder_name, account_number, account_type, institution_id)
-SELECT '456789012', 'Bachmanity LLC', '901456789', 'checking_account', 'cl_banco_bci'
-WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '456789012');
+SELECT '456789013', 'Bachmanity LLC', '901456789', 'checking_account', 'cl_banco_bci'
+WHERE NOT EXISTS (SELECT 1 FROM saved_counterparties WHERE holder_id = '456789013');
 
--- ── Operation 1: Small transfer (single transaction, already succeeded) ──
+-- ── Operation 1: Small transfer (single transaction, succeeded 3 days ago) ──
 INSERT INTO transfer_operations
   (account_id, account_name, counterparty_holder_id, counterparty_holder_name,
    counterparty_account_number, counterparty_account_type, counterparty_institution_id,
@@ -73,41 +77,41 @@ SELECT 1, 3500000, CURRENT_DATE - 3, 'succeeded', 'trx_abc123def456', gen_random
        NOW() - INTERVAL '3 days'
 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE fintoc_transfer_id = 'trx_abc123def456');
 
--- ── Operation 2: Large transfer (split into 3 days, 2 succeeded, 1 pending) ──
+-- ── Operation 2: Large transfer (split 3 days, all 3 succeeded = completed) ──
 INSERT INTO transfer_operations
   (account_id, account_name, counterparty_holder_id, counterparty_holder_name,
    counterparty_account_number, counterparty_account_type, counterparty_institution_id,
    total_amount, currency, comment, description, status, created_at)
-SELECT 'acc_demo_001', 'Cuenta Corriente Empresa Alpha', '123456789', 'Hooli Inc',
+SELECT 'acc_demo_001', 'Cuenta Corriente Empresa Alpha', '123456785', 'Hooli Inc',
        '301234567', 'checking_account', 'cl_banco_santander',
-       18500000, 'CLP', 'Liquidacion Q1 2026', 'Pago trimestral consultoria', 'in_progress',
-       NOW() - INTERVAL '2 days'
+       18500000, 'CLP', 'Liquidacion Q1 2026', 'Pago trimestral consultoria', 'completed',
+       NOW() - INTERVAL '4 days'
 WHERE NOT EXISTS (SELECT 1 FROM transfer_operations WHERE comment = 'Liquidacion Q1 2026');
 
 INSERT INTO transactions
   (transfer_operation_id, amount, scheduled_date, status, fintoc_transfer_id, idempotency_key, created_at)
-SELECT 2, 7000000, CURRENT_DATE - 2, 'succeeded', 'trx_day1_aaa111', gen_random_uuid()::text,
-       NOW() - INTERVAL '2 days'
+SELECT 2, 7000000, CURRENT_DATE - 4, 'succeeded', 'trx_day1_aaa111', gen_random_uuid()::text,
+       NOW() - INTERVAL '4 days'
 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE fintoc_transfer_id = 'trx_day1_aaa111');
 
 INSERT INTO transactions
   (transfer_operation_id, amount, scheduled_date, status, fintoc_transfer_id, idempotency_key, created_at)
-SELECT 2, 7000000, CURRENT_DATE - 1, 'succeeded', 'trx_day2_bbb222', gen_random_uuid()::text,
-       NOW() - INTERVAL '1 day'
+SELECT 2, 7000000, CURRENT_DATE - 3, 'succeeded', 'trx_day2_bbb222', gen_random_uuid()::text,
+       NOW() - INTERVAL '3 days'
 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE fintoc_transfer_id = 'trx_day2_bbb222');
 
 INSERT INTO transactions
-  (transfer_operation_id, amount, scheduled_date, status, idempotency_key, created_at)
-SELECT 2, 4500000, CURRENT_DATE, 'pending', gen_random_uuid()::text,
+  (transfer_operation_id, amount, scheduled_date, status, fintoc_transfer_id, idempotency_key, created_at)
+SELECT 2, 4500000, CURRENT_DATE - 2, 'succeeded', 'trx_day3_ccc333', gen_random_uuid()::text,
        NOW() - INTERVAL '2 days'
-WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE transfer_operation_id = 2 AND amount = 4500000 AND status = 'pending');
+WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE fintoc_transfer_id = 'trx_day3_ccc333');
 
 -- ── Operation 3: Medium transfer (pending, scheduled for today) ──
 INSERT INTO transfer_operations
   (account_id, account_name, counterparty_holder_id, counterparty_holder_name,
    counterparty_account_number, counterparty_account_type, counterparty_institution_id,
    total_amount, currency, comment, description, status, created_at)
-SELECT 'acc_demo_002', 'Cuenta Vista Inversiones Beta', '987654321', 'Raviga Capital',
+SELECT 'acc_demo_002', 'Cuenta Vista Inversiones Beta', '987654325', 'Raviga Capital',
        '701987654', 'sight_account', 'cl_banco_estado',
        5000000, 'CLP', 'Distribucion utilidades', 'Reparto socios marzo', 'pending',
        NOW() - INTERVAL '1 day'
@@ -119,12 +123,12 @@ SELECT 3, 5000000, CURRENT_DATE, 'pending', gen_random_uuid()::text,
        NOW() - INTERVAL '1 day'
 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE transfer_operation_id = 3 AND status = 'pending');
 
--- ── Operation 4: Failed transfer ──
+-- ── Operation 4: Failed transfer (5 days ago) ──
 INSERT INTO transfer_operations
   (account_id, account_name, counterparty_holder_id, counterparty_holder_name,
    counterparty_account_number, counterparty_account_type, counterparty_institution_id,
    total_amount, currency, comment, description, status, created_at)
-SELECT 'acc_demo_001', 'Cuenta Corriente Empresa Alpha', '456789012', 'Bachmanity LLC',
+SELECT 'acc_demo_001', 'Cuenta Corriente Empresa Alpha', '456789013', 'Bachmanity LLC',
        '901456789', 'checking_account', 'cl_banco_bci',
        2000000, 'CLP', 'Pago servicio cloud', 'AWS infra Q1', 'failed',
        NOW() - INTERVAL '5 days'

@@ -92,24 +92,35 @@ fintoc-api-integration/
 
 ## Quick Start
 
-### Full stack (Docker Compose)
+### 1. Environment setup
 
 ```bash
-# Copy and fill in your secrets
 cp .env.example .env
-
-# Build and start all services
-docker compose build
-docker compose up -d
-
-# Verify
-docker compose ps
-curl http://localhost:8000/api/health
 ```
 
-This starts **4 containers**: `backend` (FastAPI :8000), `redis`, `celery-worker`, `celery-beat`.
+Add your secrets to `.env`:
 
-### SPA (frontend)
+```env
+FINTOC_API_KEY=sk_test_...
+FINTOC_WEBHOOK_SECRET=whsec_...
+FINTOC_WEBHOOK_TEST_URL=https://webhook.site/your-unique-id
+```
+
+### 2. Backend + Celery + Redis (Docker Compose)
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+This starts **4 containers**: `backend` (:8000), `redis` (:6379), `celery-worker`, `celery-beat`.
+
+```bash
+docker compose ps
+curl http://localhost:8000/api/health   # → {"status":"ok"}
+```
+
+### 3. SPA (frontend)
 
 ```bash
 cd spa
@@ -117,23 +128,37 @@ npm install
 npm run dev          # → http://localhost:5173
 ```
 
-The SPA proxies `/api/*` requests to `http://localhost:8000` via Vite dev server.
+The Vite dev server proxies `/api/*` to `http://localhost:8000`.
 
-### Export CSV
+### 4. Seed a test account
 
 ```bash
-# From webhook event store (backend container)
+# List accounts
+curl -s http://localhost:8000/api/accounts | python3 -m json.tool
+
+# Simulate inbound transfer (replace ACCOUNT_NUMBER_ID)
+curl -s -X POST http://localhost:8000/api/simulate/receive-transfer \
+  -H "Content-Type: application/json" \
+  -d '{"account_number_id": "<ACCOUNT_NUMBER_ID>", "amount": 50000000, "currency": "CLP"}'
+```
+
+Or run `/seed-account` in Windsurf. See `.windsurf/workflows/seed-account.md`.
+
+### 5. Webhook testing (dev)
+
+Register your `FINTOC_WEBHOOK_TEST_URL` in the Fintoc dashboard for `transfer.*` events.
+For local development, use [webhook.site](https://webhook.site) or ngrok to expose the backend.
+
+### 6. Export CSV
+
+```bash
+# CLI (from backend container)
 docker compose exec backend python -m app.export_csv
 docker compose exec backend python -m app.export_csv -o /tmp/report.csv
 docker compose exec backend python -m app.export_csv --all   # include failed/rejected
-
-# From the SPA
-# Click "Export CSV" on the Pending page — downloads succeeded transactions from PGlite
 ```
 
-### Seed a test account
-
-See `.windsurf/workflows/seed-account.md` or run `/seed-account` in Windsurf.
+Or click **"Export CSV"** on the Pending page in the SPA.
 
 ## Local Storage (PGlite — in-browser Postgres)
 

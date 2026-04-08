@@ -119,7 +119,7 @@ def simulate_execution(
     """
     if counterparty is None:
         counterparty = CounterpartyRequest(
-            holder_id="000000000",
+            holder_id="111111111",  # 11.111.111-1 (valid RUT)
             holder_name="Simulated Counterparty",
             account_number="000000000",
             account_type="checking_account",
