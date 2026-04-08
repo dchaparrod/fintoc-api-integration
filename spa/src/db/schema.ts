@@ -140,3 +140,18 @@ SELECT 4, 2000000, CURRENT_DATE - 5, 'failed', gen_random_uuid()::text,
        NOW() - INTERVAL '5 days'
 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE transfer_operation_id = 4 AND status = 'failed');
 `;
+
+export const MIGRATION_SQL = `
+-- v3: Expand transaction status constraint to include Fintoc intermediate statuses
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.check_constraints
+    WHERE constraint_name = 'transactions_status_check'
+  ) THEN
+    ALTER TABLE transactions DROP CONSTRAINT transactions_status_check;
+    ALTER TABLE transactions ADD CONSTRAINT transactions_status_check
+      CHECK (status IN ('pending', 'processing', 'pending_confirmation', 'succeeded', 'failed', 'rejected'));
+  END IF;
+END $$;
+`;

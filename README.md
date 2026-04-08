@@ -102,8 +102,10 @@ Add your secrets to `.env`:
 
 ```env
 FINTOC_API_KEY=sk_test_...
+APP_ENV=development
+FINTC_API_KEY_PATH=/path/to/your/fintoc-api-key.pem
 FINTOC_WEBHOOK_SECRET=whsec_...
-FINTOC_WEBHOOK_TEST_URL=https://webhook.site/your-unique-id
+FINTOC_WEBHOOK_URL=https://webhook.site/your-unique-id
 ```
 
 ### 2. Backend + Celery + Redis (Docker Compose)
@@ -146,7 +148,7 @@ Or run `/seed-account` in Windsurf. See `.windsurf/workflows/seed-account.md`.
 
 ### 5. Webhook testing (dev)
 
-Register your `FINTOC_WEBHOOK_TEST_URL` in the Fintoc dashboard for `transfer.*` events.
+Register your `FINTOC_WEBHOOK_URL` in the Fintoc dashboard for `transfer.*` events.
 For local development, use [webhook.site](https://webhook.site) or ngrok to expose the backend.
 
 ### 6. Export CSV

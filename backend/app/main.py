@@ -1,5 +1,7 @@
 import logging
 import os
+import sys
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import Optional
 
@@ -32,10 +34,40 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ──
+    if APP_ENV == "production":
+        missing = []
+        if not os.getenv("FINTOC_WEBHOOK_SECRET"):
+            missing.append("FINTOC_WEBHOOK_SECRET")
+        if not os.getenv("FINTOC_API_KEY"):
+            missing.append("FINTOC_API_KEY")
+        if missing:
+            logger.critical(
+                "PRODUCTION: Missing required env vars: %s — refusing to start",
+                ", ".join(missing),
+            )
+            sys.exit(1)
+        logger.info("Starting in PRODUCTION mode")
+    else:
+        logger.info("Starting in DEVELOPMENT mode")
+        from .webhook_simulator import start_simulator
+        start_simulator()
+
+    yield
+    # ── Shutdown ──
+
+
 app = FastAPI(
     title="Fintoc Transfer Backend",
     description="Backend service for Fintoc accounts, counterparties, transfer execution, JWS signing, and daily batch processing.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

@@ -160,6 +160,6 @@ When ready to move off PGlite:
 | `FINTOC_API_KEY` | Secrets Manager | backend, celery-worker |
 | `FINTOC_PRIVATE_KEY_PATH` | Secrets Manager (PEM) | backend, celery-worker |
 | `FINTOC_WEBHOOK_SECRET` | Secrets Manager | backend |
-| `FINTOC_WEBHOOK_TEST_URL` | SSM Parameter | backend (dev only) |
+| `FINTOC_WEBHOOK_URL` | SSM Parameter | backend (dev only) |
 | `CELERY_BROKER_URL` | ElastiCache endpoint | backend, celery-worker, celery-beat |
 | `CELERY_RESULT_BACKEND` | ElastiCache endpoint | backend, celery-worker, celery-beat |
