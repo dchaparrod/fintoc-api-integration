@@ -17,8 +17,7 @@ Automate outbound transfers via the Fintoc API. Amounts exceeding the daily limi
 - **Counterparty address book** — save, list, and delete counterparties in PGlite
 - **Simulate receive transfer** — fund test accounts via `POST /api/simulate/receive-transfer`
 - **Simulate split** — preview split plan via `POST /api/simulate/split-transfer`
-- **Seed account workflow** — `.windsurf/workflows/seed-account.md` documents how to fund a test account
-- **Full setup workflow** — `.windsurf/workflows/setup.md` builds, seeds, and starts the entire stack with a single command
+- **Automated setup** — run the `/setup` workflow in Windsurf to build, seed, and start the entire stack automatically
 
 ## Architecture
 
@@ -91,13 +90,15 @@ fintoc-api-integration/
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── docker-compose.yml                # backend, redis, celery-worker, celery-beat
-├── .windsurf/workflows/              # Reusable workflows (setup, seed-account)
+├── .windsurf/workflows/setup.md      # Automated setup workflow (build, seed, start)
 ├── plans/                            # Implementation plans
 ├── .env.example
 └── README.md
 ```
 
 ## Quick Start
+
+> **Automated**: Run `/setup` in Windsurf to execute all steps below automatically (build, seed, start SPA, verify services).
 
 ### 1. Environment setup
 
@@ -152,8 +153,6 @@ curl -s -X POST http://localhost:8000/api/simulate/receive-transfer \
   -H "Content-Type: application/json" \
   -d '{"account_number_id": "<ACCOUNT_NUMBER_ID>", "amount": 50000000, "currency": "CLP"}'
 ```
-
-Or run `/seed-account` in Windsurf. See `.windsurf/workflows/seed-account.md`.
 
 ### 5. Webhook status sync
 
