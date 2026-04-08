@@ -7,6 +7,7 @@ import { formatCLP, formatDate, formatDateShort } from "@/lib/utils";
 import { succeededTransactionsToCSV, downloadCSV } from "@/lib/csv";
 import type { OperationWithDetails, OperationStatus, TransactionStatus } from "@/lib/types";
 import { ClipboardList, ChevronDown, ChevronRight, RefreshCw, Download } from "lucide-react";
+import { WEBHOOK_SYNC_EVENT } from "@/hooks/useWebhookSync";
 
 const statusVariant: Record<OperationStatus, "default" | "warning" | "success" | "destructive"> = {
   pending: "warning",
@@ -18,6 +19,7 @@ const statusVariant: Record<OperationStatus, "default" | "warning" | "success" |
 const txStatusVariant: Record<TransactionStatus, "default" | "warning" | "success" | "destructive" | "secondary"> = {
   pending: "warning",
   processing: "default",
+  pending_confirmation: "default",
   succeeded: "success",
   failed: "destructive",
   rejected: "destructive",
@@ -42,6 +44,16 @@ export default function PendingPage() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Auto-refresh when webhook sync updates PGlite
+  useEffect(() => {
+    const handler = () => {
+      console.log("[PendingPage] Webhook sync detected, refreshing...");
+      loadData();
+    };
+    window.addEventListener(WEBHOOK_SYNC_EVENT, handler);
+    return () => window.removeEventListener(WEBHOOK_SYNC_EVENT, handler);
   }, []);
 
   function toggleExpand(opId: number) {

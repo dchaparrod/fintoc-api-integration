@@ -3,7 +3,13 @@ import { fetchWebhookEvents } from "@/services/api";
 import { updateTransactionStatus, updateOperationStatus } from "@/db/queries";
 import { getDb } from "@/db/index";
 
-const POLL_INTERVAL_MS = 10_000; // 10 seconds
+const POLL_INTERVAL_MS = 5_000; // 5 seconds
+
+/**
+ * Custom event dispatched when webhook sync updates PGlite data.
+ * Pages can listen for this to auto-refresh.
+ */
+export const WEBHOOK_SYNC_EVENT = "webhook-sync-updated";
 
 /**
  * Polls the backend for new Fintoc webhook events and syncs
@@ -20,6 +26,8 @@ export function useWebhookSync(enabled: boolean = true) {
       // Update last seen timestamp
       lastSeenRef.current = events[0].timestamp;
 
+      let updated = false;
+
       for (const event of events) {
         if (!event.transfer_id) continue;
 
@@ -28,18 +36,29 @@ export function useWebhookSync(enabled: boolean = true) {
 
         // Find the transaction in PGlite by fintoc_transfer_id
         const db = await getDb();
-        const res = await db.query<{ id: number; transfer_operation_id: number }>(
-          "SELECT id, transfer_operation_id FROM transactions WHERE fintoc_transfer_id = $1",
+        const res = await db.query<{ id: number; transfer_operation_id: number; status: string }>(
+          "SELECT id, transfer_operation_id, status FROM transactions WHERE fintoc_transfer_id = $1",
           [event.transfer_id]
         );
 
         if (res.rows.length === 0) continue;
 
         const tx = res.rows[0];
+
+        // Skip if already in the target status
+        if (tx.status === newStatus) continue;
+
+        console.log(`[WebhookSync] Updating tx #${tx.id}: ${tx.status} → ${newStatus} (transfer: ${event.transfer_id})`);
         await updateTransactionStatus(tx.id, newStatus, event.transfer_id);
+        updated = true;
 
         // Check if all transactions in the operation are resolved
         await checkAndUpdateOperation(tx.transfer_operation_id);
+      }
+
+      // Notify listeners (e.g. PendingPage) to refresh
+      if (updated) {
+        window.dispatchEvent(new CustomEvent(WEBHOOK_SYNC_EVENT));
       }
     } catch (err) {
       console.warn("[WebhookSync] Poll failed:", err);
