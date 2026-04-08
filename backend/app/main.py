@@ -56,8 +56,7 @@ async def lifespan(app: FastAPI):
         logger.info("Starting in PRODUCTION mode")
     else:
         logger.info("Starting in DEVELOPMENT mode")
-        from .webhook_simulator import start_simulator
-        start_simulator()
+        logger.info("Webhook simulator runs via Celery Beat (every 10s)")
 
     yield
     # ── Shutdown ──

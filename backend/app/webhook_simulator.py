@@ -1,31 +1,32 @@
 """
 Development-only webhook simulator.
 
-Polls the Fintoc API every 10 seconds for recent transfers,
-detects status changes, and feeds them into the local webhook handler
-as if Fintoc had sent a real webhook event.
+Runs as a Celery Beat periodic task (every 10 seconds).
+Polls the Fintoc API for outbound transfer status changes
+and feeds them into the local webhook handler as synthetic events.
 
-Only runs when APP_ENV=development.
+Only active when APP_ENV=development.
 """
 
-import asyncio
 import json
 import logging
 import os
 
+import httpx
 from fintoc import Fintoc
 from fintoc.errors import FintocError
-
-from .webhooks import handle_webhook_event
 
 logger = logging.getLogger(__name__)
 
 FINTOC_API_KEY = os.getenv("FINTOC_API_KEY", "")
 FINTOC_PRIVATE_KEY_PATH = os.getenv("FINTOC_PRIVATE_KEY_PATH", "")
-POLL_INTERVAL = 10  # seconds
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
-# Track known transfer statuses to detect changes
+TERMINAL_STATUSES = {"succeeded", "failed", "rejected", "returned"}
+
+# Track known transfer statuses across task invocations (worker process memory)
 _known_statuses: dict[str, str] = {}
+_initialized: bool = False
 
 
 def _get_client() -> Fintoc:
@@ -33,9 +34,6 @@ def _get_client() -> Fintoc:
     if FINTOC_PRIVATE_KEY_PATH:
         kwargs["jws_private_key"] = FINTOC_PRIVATE_KEY_PATH
     return Fintoc(FINTOC_API_KEY, **kwargs)
-
-
-TERMINAL_STATUSES = {"succeeded", "failed", "rejected"}
 
 
 def _build_payload(t: object) -> dict:
@@ -58,13 +56,17 @@ def _build_payload(t: object) -> dict:
     }
 
 
-def _poll_transfers(initial: bool = False) -> list[dict]:
-    """Fetch recent transfers from all accounts and detect status changes.
+def poll_and_inject() -> dict:
+    """Poll Fintoc for outbound transfer status changes and inject webhook events.
 
-    On the initial run, also emit events for transfers already in a terminal
-    state so the SPA can catch up on anything missed while the server was down.
+    Called by Celery Beat every 10 seconds.
+    Returns a summary dict for task result tracking.
     """
-    events = []
+    global _initialized
+
+    initial = not _initialized
+    events: list[dict] = []
+
     try:
         client = _get_client()
         accounts = client.v2.accounts.list(status="active", lazy=False)
@@ -82,8 +84,7 @@ def _poll_transfers(initial: bool = False) -> list[dict]:
 
                     # Only track outbound transfers (the ones we created)
                     if direction != "outbound":
-                        prev = _known_statuses.get(tid)
-                        if prev is None:
+                        if tid not in _known_statuses:
                             _known_statuses[tid] = status
                         continue
 
@@ -95,19 +96,11 @@ def _poll_transfers(initial: bool = False) -> list[dict]:
                     _known_statuses[tid] = status
 
                     if initial and status in TERMINAL_STATUSES:
-                        # First run: emit events for already-resolved transfers
                         events.append(_build_payload(t))
-                        logger.info(
-                            "[WebhookSim] Initial catchup: %s is %s",
-                            tid, status,
-                        )
+                        logger.info("[WebhookSim] Initial catchup: %s is %s", tid, status)
                     elif prev is not None:
-                        # Subsequent runs: emit on status change
                         events.append(_build_payload(t))
-                        logger.info(
-                            "[WebhookSim] Transfer %s changed: %s → %s",
-                            tid, prev, status,
-                        )
+                        logger.info("[WebhookSim] Transfer %s changed: %s → %s", tid, prev, status)
 
             except FintocError as e:
                 logger.debug("[WebhookSim] Failed to list transfers for %s: %s", acc.id, e)
@@ -119,48 +112,23 @@ def _poll_transfers(initial: bool = False) -> list[dict]:
     except Exception as e:
         logger.warning("[WebhookSim] Unexpected error: %s", e)
 
-    return events
-
-
-def _inject_events(events: list[dict]):
-    """Feed synthetic events into the webhook handler."""
+    # POST events to the backend webhook endpoint
     for payload in events:
-        handle_webhook_event(
-            payload=json.dumps(payload),
-            signature="",
-            secret="",  # skip validation in dev
-        )
-        logger.info(
-            "[WebhookSim] Injected event: %s for %s",
-            payload["type"],
-            payload["data"]["id"],
-        )
-
-
-async def _run_simulator():
-    """Background loop: poll Fintoc, feed status changes into webhook handler."""
-    logger.info("[WebhookSim] Starting development webhook simulator (every %ds)", POLL_INTERVAL)
-
-    # Initial run: catch up on transfers that reached terminal state while server was down
-    initial_events = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: _poll_transfers(initial=True)
-    )
-    logger.info(
-        "[WebhookSim] Initial snapshot: %d transfers tracked, %d catchup events",
-        len(_known_statuses), len(initial_events),
-    )
-    _inject_events(initial_events)
-
-    while True:
-        await asyncio.sleep(POLL_INTERVAL)
         try:
-            events = await asyncio.get_event_loop().run_in_executor(None, _poll_transfers)
-            _inject_events(events)
-        except Exception as e:
-            logger.warning("[WebhookSim] Poll cycle failed: %s", e)
+            resp = httpx.post(
+                f"{BACKEND_URL}/api/webhooks/fintoc",
+                content=json.dumps(payload),
+                headers={"Content-Type": "application/json"},
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+            logger.info("[WebhookSim] Injected: %s for %s", payload["type"], payload["data"]["id"])
+        except httpx.HTTPError as e:
+            logger.warning("[WebhookSim] Failed to POST event for %s: %s", payload["data"]["id"], e)
 
+    if initial:
+        _initialized = True
+        logger.info("[WebhookSim] Initial snapshot: %d transfers tracked, %d catchup events",
+                    len(_known_statuses), len(events))
 
-def start_simulator():
-    """Schedule the simulator as a background asyncio task."""
-    loop = asyncio.get_event_loop()
-    loop.create_task(_run_simulator())
+    return {"tracked": len(_known_statuses), "events_injected": len(events)}

@@ -3,11 +3,29 @@ Celery tasks for Fintoc transfer processing.
 """
 
 import logging
+import os
 
 from .celery_app import celery
 from .transfer_pending import process_pending_transactions, build_pending_list_from_payload
 
 logger = logging.getLogger(__name__)
+
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+
+
+@celery.task(bind=True, name="app.tasks.poll_webhook_simulator")
+def poll_webhook_simulator(self):
+    """
+    Development-only: poll Fintoc for outbound transfer status changes
+    and inject synthetic webhook events into the in-memory store.
+
+    Runs every 10 seconds via Celery Beat when APP_ENV=development.
+    """
+    if APP_ENV != "development":
+        return {"skipped": True, "reason": "not in development mode"}
+
+    from .webhook_simulator import poll_and_inject
+    return poll_and_inject()
 
 
 @celery.task(bind=True, name="app.tasks.process_daily_pending")

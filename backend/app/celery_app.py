@@ -31,6 +31,8 @@ celery.conf.update(
     result_expires=86400,  # 24 hours
 )
 
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+
 celery.conf.beat_schedule = {
     "process-daily-pending": {
         "task": "app.tasks.process_daily_pending",
@@ -38,3 +40,10 @@ celery.conf.beat_schedule = {
         "args": [],
     },
 }
+
+# Development: poll Fintoc for transfer status changes every 10 seconds
+if APP_ENV == "development":
+    celery.conf.beat_schedule["webhook-simulator-poll"] = {
+        "task": "app.tasks.poll_webhook_simulator",
+        "schedule": 10.0,  # every 10 seconds
+    }
