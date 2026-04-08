@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getOperationsWithDetails } from "@/db/queries";
+import { getOperationsWithDetails, getSucceededTransactions } from "@/db/queries";
 import { formatCLP, formatDate, formatDateShort } from "@/lib/utils";
+import { succeededTransactionsToCSV, downloadCSV } from "@/lib/csv";
 import type { OperationWithDetails, OperationStatus, TransactionStatus } from "@/lib/types";
-import { ClipboardList, ChevronDown, ChevronRight, Play } from "lucide-react";
+import { ClipboardList, ChevronDown, ChevronRight, Play, Download } from "lucide-react";
 import { executePendingTransfers } from "@/services/api";
 
 const statusVariant: Record<OperationStatus, "default" | "warning" | "success" | "destructive"> = {
@@ -67,6 +68,21 @@ export default function PendingPage() {
     }
   }
 
+  async function handleDownloadCSV() {
+    try {
+      const rows = await getSucceededTransactions();
+      if (rows.length === 0) {
+        setExecResult("No succeeded transactions to export.");
+        return;
+      }
+      const csv = succeededTransactionsToCSV(rows);
+      const date = new Date().toISOString().split("T")[0];
+      downloadCSV(csv, `succeeded-transfers-${date}.csv`);
+    } catch (err) {
+      setExecResult(err instanceof Error ? err.message : "Failed to export CSV");
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <Card>
@@ -81,16 +97,27 @@ export default function PendingPage() {
                 View all transfer operations and their associated transactions.
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRunPending}
-              disabled={executing}
-              className="flex items-center gap-1"
-            >
-              <Play className="h-4 w-4" />
-              {executing ? "Running..." : "Run Pending"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadCSV}
+                className="flex items-center gap-1"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRunPending}
+                disabled={executing}
+                className="flex items-center gap-1"
+              >
+                <Play className="h-4 w-4" />
+                {executing ? "Running..." : "Run Pending"}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

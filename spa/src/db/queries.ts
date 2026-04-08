@@ -186,3 +186,60 @@ export async function updateOperationStatus(operationId: number, status: string)
   const db = await getDb();
   await db.query("UPDATE transfer_operations SET status = $1 WHERE id = $2", [status, operationId]);
 }
+
+// ── CSV Export ──────────────────────────────────────────
+
+export interface SucceededTransactionRow {
+  tx_id: number;
+  operation_id: number;
+  amount: number;
+  currency: string;
+  scheduled_date: string;
+  fintoc_transfer_id: string | null;
+  idempotency_key: string;
+  tx_created_at: string;
+  account_id: string;
+  account_name: string;
+  counterparty_holder_id: string;
+  counterparty_holder_name: string;
+  counterparty_account_number: string;
+  counterparty_account_type: string;
+  counterparty_institution_id: string;
+  total_amount: number;
+  comment: string;
+  description: string;
+  operation_status: string;
+  operation_created_at: string;
+}
+
+export async function getSucceededTransactions(): Promise<SucceededTransactionRow[]> {
+  const db = await getDb();
+  const res = await db.query<SucceededTransactionRow>(`
+    SELECT
+      t.id AS tx_id,
+      t.transfer_operation_id AS operation_id,
+      t.amount,
+      op.currency,
+      t.scheduled_date,
+      t.fintoc_transfer_id,
+      t.idempotency_key,
+      t.created_at AS tx_created_at,
+      op.account_id,
+      op.account_name,
+      op.counterparty_holder_id,
+      op.counterparty_holder_name,
+      op.counterparty_account_number,
+      op.counterparty_account_type,
+      op.counterparty_institution_id,
+      op.total_amount,
+      op.comment,
+      op.description,
+      op.status AS operation_status,
+      op.created_at AS operation_created_at
+    FROM transactions t
+    JOIN transfer_operations op ON op.id = t.transfer_operation_id
+    WHERE t.status = 'succeeded'
+    ORDER BY t.scheduled_date DESC, t.id DESC
+  `);
+  return res.rows;
+}
