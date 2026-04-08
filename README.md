@@ -9,7 +9,7 @@ Automate outbound transfers via the Fintoc API. Amounts exceeding the daily limi
 - **Celery daily worker** — `celery-beat` triggers `process_daily_pending` at 09:00 CLT; transactions can also be enqueued on-demand via API
 - **Task polling** — enqueue pending transactions (`POST /api/tasks/process-pending`) and poll status (`GET /api/tasks/{id}/status`)
 - **Webhook ingestion** — `POST /api/webhooks/fintoc` receives Fintoc `transfer.*` events, validates signature, stores in-memory
-- **Webhook simulator (dev)** — when `APP_ENV=development`, the backend polls Fintoc for transfer status changes every 10 s and injects synthetic webhook events automatically — no public URL or ngrok required
+- **Webhook simulator (dev)** — when `APP_ENV=development`, a Celery Beat task polls Fintoc every 10 s for outbound transfer status changes and POSTs synthetic webhook events to the backend — no public URL or ngrok required
 - **Webhook → PGlite sync** — SPA polls `GET /api/webhook-events` every 5 s and updates local transaction/operation statuses in real time
 - **RUT validation** — Chilean RUT (holder_id) validated with modulo-11 check digit in both the SPA form and backend Pydantic schema
 - **CSV export (SPA)** — "Export CSV" button on the Pending page downloads all succeeded transactions with full operation details
@@ -75,17 +75,19 @@ fintoc-api-integration/
 │   ├── app/
 │   │   ├── main.py                   # All API endpoints
 │   │   ├── celery_app.py             # Celery config + beat schedule
-│   │   ├── tasks.py                  # process_daily_pending task
+│   │   ├── tasks.py                  # process_daily_pending + webhook simulator tasks
 │   │   ├── fintoc_client.py          # Fintoc SDK wrapper
 │   │   ├── webhooks.py               # Webhook event handler + in-memory store
-│   │   ├── webhook_simulator.py      # Dev-only: polls Fintoc, injects synthetic webhook events
-│   │   ├── rut.py                    # Chilean RUT validation + formatting
-│   │   ├── simulate.py               # Multi-day split simulation
 │   │   ├── transfer_pending.py       # Daily batch executor per account
-│   │   ├── export_csv.py             # CLI: export succeeded events to CSV
 │   │   ├── schemas.py                # Pydantic models
 │   │   ├── jws.py                    # JWS signature generation (RS256)
-│   │   └── institutions.json         # 21 Chilean bank IDs
+│   │   ├── data/
+│   │   │   └── institutions.json     # 21 Chilean bank IDs
+│   │   └── helpers/
+│   │       ├── rut.py                # Chilean RUT validation + formatting
+│   │       ├── simulate.py           # Multi-day split simulation
+│   │       ├── export_csv.py         # CLI: export succeeded events to CSV
+│   │       └── webhook_simulator.py  # Dev-only: Celery task polls Fintoc, POSTs events
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── docker-compose.yml                # backend, redis, celery-worker, celery-beat
@@ -159,7 +161,7 @@ The backend uses `APP_ENV` to determine how transfer status updates are received
 
 | `APP_ENV` | Behavior |
 |-----------|----------|
-| `development` | **Webhook simulator** runs automatically — polls Fintoc every 10 s for outbound transfer status changes, injects synthetic `transfer.succeeded` / `transfer.failed` events into the in-memory store. No public URL needed. |
+| `development` | **Webhook simulator** runs as a Celery Beat task every 10 s — polls Fintoc for outbound transfer status changes and POSTs synthetic `transfer.succeeded` / `transfer.failed` events to `POST /api/webhooks/fintoc`. No public URL needed. |
 | `production` | Real webhooks via `POST /api/webhooks/fintoc`. Register `FINTOC_WEBHOOK_URL` in the Fintoc dashboard for `transfer.*` events. `FINTOC_WEBHOOK_SECRET` and `FINTOC_API_KEY` are **required** — the server refuses to start without them. |
 
 The SPA polls `GET /api/webhook-events` every 5 seconds and updates PGlite transaction/operation statuses automatically. The Pending page refreshes in real time when changes are detected.
@@ -168,9 +170,9 @@ The SPA polls `GET /api/webhook-events` every 5 seconds and updates PGlite trans
 
 ```bash
 # CLI (from backend container)
-docker compose exec backend python -m app.export_csv
-docker compose exec backend python -m app.export_csv -o /tmp/report.csv
-docker compose exec backend python -m app.export_csv --all   # include failed/rejected
+docker compose exec backend python -m app.helpers.export_csv
+docker compose exec backend python -m app.helpers.export_csv -o /tmp/report.csv
+docker compose exec backend python -m app.helpers.export_csv --all   # include failed/rejected
 ```
 
 Or click **"Export CSV"** on the Pending page in the SPA.
@@ -210,7 +212,7 @@ Accounts and counterparties come from the Fintoc API. Only the following are sto
 - **Execution plan preview**: users review day-by-day breakdown before confirming a multi-day operation
 - **Celery + Redis**: async task processing with daily beat schedule and on-demand enqueue
 - **Webhook sync**: backend stores events in-memory; SPA polls every 5 s and updates PGlite
-- **Dev webhook simulator**: `APP_ENV=development` enables automatic polling of Fintoc transfer statuses — no ngrok or public URL needed
+- **Dev webhook simulator**: `APP_ENV=development` enables a Celery Beat task that polls Fintoc and POSTs events to the backend — no ngrok or public URL needed
 - **Production guard**: `APP_ENV=production` requires `FINTOC_WEBHOOK_SECRET` and `FINTOC_API_KEY` or the server exits on startup
 - **RUT validation**: modulo-11 check digit enforced in SPA (live feedback) and backend (Pydantic field validator)
 - **JWS signing**: private key at `FINTOC_PRIVATE_KEY_PATH`, public key must be uploaded to the Fintoc dashboard
