@@ -6,8 +6,7 @@ import { getOperationsWithDetails, getSucceededTransactions } from "@/db/queries
 import { formatCLP, formatDate, formatDateShort } from "@/lib/utils";
 import { succeededTransactionsToCSV, downloadCSV } from "@/lib/csv";
 import type { OperationWithDetails, OperationStatus, TransactionStatus } from "@/lib/types";
-import { ClipboardList, ChevronDown, ChevronRight, Play, Download } from "lucide-react";
-import { executePendingTransfers } from "@/services/api";
+import { ClipboardList, ChevronDown, ChevronRight, RefreshCw, Download } from "lucide-react";
 
 const statusVariant: Record<OperationStatus, "default" | "warning" | "success" | "destructive"> = {
   pending: "warning",
@@ -28,7 +27,7 @@ export default function PendingPage() {
   const [operations, setOperations] = useState<OperationWithDetails[]>([]);
   const [expandedOps, setExpandedOps] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [executing, setExecuting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [execResult, setExecResult] = useState<string | null>(null);
 
   async function loadData() {
@@ -54,17 +53,15 @@ export default function PendingPage() {
     });
   }
 
-  async function handleRunPending() {
-    setExecuting(true);
+  async function handleRefresh() {
+    setRefreshing(true);
     setExecResult(null);
     try {
-      const res = await executePendingTransfers([], false);
-      setExecResult(`Executed ${res.results.length} transfers. Errors: ${res.errors.length}`);
       await loadData();
     } catch (err) {
-      setExecResult(err instanceof Error ? err.message : "Failed to execute");
+      setExecResult(err instanceof Error ? err.message : "Failed to refresh");
     } finally {
-      setExecuting(false);
+      setRefreshing(false);
     }
   }
 
@@ -110,12 +107,12 @@ export default function PendingPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRunPending}
-                disabled={executing}
+                onClick={handleRefresh}
+                disabled={refreshing}
                 className="flex items-center gap-1"
               >
-                <Play className="h-4 w-4" />
-                {executing ? "Running..." : "Run Pending"}
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                {refreshing ? "Refreshing..." : "Refresh"}
               </Button>
             </div>
           </div>

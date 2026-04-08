@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { createTransferOperation, listSavedCounterparties } from "@/db/queries";
-import { fetchAccounts, fetchExecutionPlan } from "@/services/api";
+import { createTransferOperation, listSavedCounterparties, updateTransactionStatus } from "@/db/queries";
+import { fetchAccounts, fetchExecutionPlan, executeTransfer } from "@/services/api";
 import type { ExecutionPlanResponse } from "@/services/api";
 import { formatCLP } from "@/lib/utils";
 import type { FintocAccount, SavedCounterparty } from "@/lib/types";
@@ -95,11 +95,37 @@ export default function TransferPage() {
         description,
       });
 
+      // Execute the first transaction immediately
+      const firstTx = transactions[0];
+      let execMsg = "";
+      try {
+        const transferResult = await executeTransfer({
+          client_id: operation.id,
+          account_id: selectedAccount.id,
+          amount: firstTx.amount,
+          currency: "CLP",
+          comment,
+          counterparty: {
+            holder_id: selectedCounterparty.holder_id,
+            holder_name: selectedCounterparty.holder_name,
+            account_number: selectedCounterparty.account_number,
+            account_type: selectedCounterparty.account_type,
+            institution_id: selectedCounterparty.institution_id,
+          },
+          idempotency_key: firstTx.idempotency_key,
+        });
+        await updateTransactionStatus(firstTx.id, transferResult.status, transferResult.id);
+        execMsg = ` — first transaction ${transferResult.status} (${formatCLP(firstTx.amount)})`;
+      } catch (execErr) {
+        await updateTransactionStatus(firstTx.id, "failed");
+        execMsg = ` — first transaction failed: ${execErr instanceof Error ? execErr.message : "Unknown error"}`;
+      }
+
       const txCount = transactions.length;
       const msg =
         txCount === 1
-          ? `Operation #${operation.id} created with 1 transaction (${formatCLP(amountNum)})`
-          : `Operation #${operation.id} created — split into ${txCount} transactions over ${txCount} days`;
+          ? `Operation #${operation.id} created${execMsg}`
+          : `Operation #${operation.id} created — split into ${txCount} transactions over ${txCount} days${execMsg}. Remaining ${txCount - 1} handled by daily cron.`;
 
       setResult({ success: true, message: msg });
       setAmount("");
