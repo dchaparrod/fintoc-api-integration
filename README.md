@@ -113,6 +113,8 @@ FINTOC_WEBHOOK_SECRET=              # required in production, optional in develo
 FINTOC_WEBHOOK_URL=                  # your registered webhook URL (production)
 ```
 
+> **JWS signing**: The corresponding **public key** must be uploaded to the [Fintoc dashboard](https://app.fintoc.com/) under API Settings → JWS Keys. The backend signs every transfer request with the private key; Fintoc verifies the signature using the public key on file.
+
 ### 2. Backend + Celery + Redis (Docker Compose)
 
 ```bash
@@ -211,7 +213,7 @@ Accounts and counterparties come from the Fintoc API. Only the following are sto
 - **Dev webhook simulator**: `APP_ENV=development` enables automatic polling of Fintoc transfer statuses — no ngrok or public URL needed
 - **Production guard**: `APP_ENV=production` requires `FINTOC_WEBHOOK_SECRET` and `FINTOC_API_KEY` or the server exits on startup
 - **RUT validation**: modulo-11 check digit enforced in SPA (live feedback) and backend (Pydantic field validator)
-- **JWS signing**: private key at `~/.ssh/fintoc_private.pem`, passed to Fintoc SDK automatically
+- **JWS signing**: private key at `FINTOC_PRIVATE_KEY_PATH`, public key must be uploaded to the Fintoc dashboard
 - **Simulate flag**: all transfer functions accept `simulate=True` for dry-run testing
 - **Idempotency**: UUID v4 per transaction, stored in DB to prevent double-execution
 - **CSV export**: available both from the SPA (PGlite query) and CLI (webhook event store)
