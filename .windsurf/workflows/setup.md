@@ -12,6 +12,23 @@ Build all services, seed a test account with funds, start the SPA, and display a
 - Node.js 20+ installed
 - `.env` configured (copy from `.env.example`)
 - JWS private key at `FINTOC_PRIVATE_KEY_PATH`
+- JWS public key uploaded to the Fintoc dashboard (API Settings → JWS Keys)
+
+## Summary
+
+| Step | Action |
+|------|--------|
+| 1 | Verify `.env` exists |
+| 2 | `docker compose up -d --build` (backend, redis, celery-worker, celery-beat) |
+| 3 | Wait for backend health check |
+| 4 | Verify webhook simulator started (dev only) |
+| 5 | List Fintoc accounts |
+| 6 | Seed account with CLP $50M via simulate/receive-transfer |
+| 7 | Confirm balance |
+| 8 | `npm install && npm run dev` (SPA at :5173) |
+| 9 | Verify Docker services |
+| 10 | Test pending tx execution (dry-run) |
+| 11 | Print access summary with URLs, commands, and DB models |
 
 ## Steps
 
