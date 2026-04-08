@@ -35,8 +35,35 @@ def _get_client() -> Fintoc:
     return Fintoc(FINTOC_API_KEY, **kwargs)
 
 
-def _poll_transfers() -> list[dict]:
-    """Fetch recent transfers from all accounts and detect status changes."""
+TERMINAL_STATUSES = {"succeeded", "failed", "rejected"}
+
+
+def _build_payload(t: object) -> dict:
+    """Build a synthetic webhook payload from a Fintoc transfer object."""
+    status = getattr(t, "status", "unknown")
+    counterparty = getattr(t, "counterparty", None)
+    return {
+        "type": f"transfer.{status}",
+        "data": {
+            "id": getattr(t, "id", ""),
+            "status": status,
+            "amount": getattr(t, "amount", 0),
+            "currency": getattr(t, "currency", "CLP"),
+            "counterparty": {
+                "holder_name": getattr(counterparty, "holder_name", "") if counterparty else "",
+                "account_number": getattr(counterparty, "account_number", "") if counterparty else "",
+                "institution_id": getattr(counterparty, "institution_id", "") if counterparty else "",
+            } if counterparty else {},
+        },
+    }
+
+
+def _poll_transfers(initial: bool = False) -> list[dict]:
+    """Fetch recent transfers from all accounts and detect status changes.
+
+    On the initial run, also emit events for transfers already in a terminal
+    state so the SPA can catch up on anything missed while the server was down.
+    """
     events = []
     try:
         client = _get_client()
@@ -51,6 +78,15 @@ def _poll_transfers() -> list[dict]:
                 for t in transfers:
                     tid = t.id
                     status = t.status
+                    direction = getattr(t, "direction", "outbound")
+
+                    # Only track outbound transfers (the ones we created)
+                    if direction != "outbound":
+                        prev = _known_statuses.get(tid)
+                        if prev is None:
+                            _known_statuses[tid] = status
+                        continue
+
                     prev = _known_statuses.get(tid)
 
                     if prev == status:
@@ -58,33 +94,20 @@ def _poll_transfers() -> list[dict]:
 
                     _known_statuses[tid] = status
 
-                    # Skip initial population (don't fire events for existing transfers)
-                    if prev is None:
-                        continue
-
-                    # Build a synthetic webhook payload
-                    event_type = f"transfer.{status}"
-                    counterparty = getattr(t, "counterparty", None)
-                    payload = {
-                        "type": event_type,
-                        "data": {
-                            "id": tid,
-                            "status": status,
-                            "amount": getattr(t, "amount", 0),
-                            "currency": getattr(t, "currency", "CLP"),
-                            "counterparty": {
-                                "holder_name": getattr(counterparty, "holder_name", "") if counterparty else "",
-                                "account_number": getattr(counterparty, "account_number", "") if counterparty else "",
-                                "institution_id": getattr(counterparty, "institution_id", "") if counterparty else "",
-                            } if counterparty else {},
-                        },
-                    }
-
-                    events.append(payload)
-                    logger.info(
-                        "[WebhookSim] Transfer %s changed: %s → %s",
-                        tid, prev, status,
-                    )
+                    if initial and status in TERMINAL_STATUSES:
+                        # First run: emit events for already-resolved transfers
+                        events.append(_build_payload(t))
+                        logger.info(
+                            "[WebhookSim] Initial catchup: %s is %s",
+                            tid, status,
+                        )
+                    elif prev is not None:
+                        # Subsequent runs: emit on status change
+                        events.append(_build_payload(t))
+                        logger.info(
+                            "[WebhookSim] Transfer %s changed: %s → %s",
+                            tid, prev, status,
+                        )
 
             except FintocError as e:
                 logger.debug("[WebhookSim] Failed to list transfers for %s: %s", acc.id, e)
@@ -99,29 +122,40 @@ def _poll_transfers() -> list[dict]:
     return events
 
 
+def _inject_events(events: list[dict]):
+    """Feed synthetic events into the webhook handler."""
+    for payload in events:
+        handle_webhook_event(
+            payload=json.dumps(payload),
+            signature="",
+            secret="",  # skip validation in dev
+        )
+        logger.info(
+            "[WebhookSim] Injected event: %s for %s",
+            payload["type"],
+            payload["data"]["id"],
+        )
+
+
 async def _run_simulator():
     """Background loop: poll Fintoc, feed status changes into webhook handler."""
     logger.info("[WebhookSim] Starting development webhook simulator (every %ds)", POLL_INTERVAL)
 
-    # Initial population run
-    await asyncio.get_event_loop().run_in_executor(None, _poll_transfers)
-    logger.info("[WebhookSim] Initial transfer snapshot: %d transfers tracked", len(_known_statuses))
+    # Initial run: catch up on transfers that reached terminal state while server was down
+    initial_events = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: _poll_transfers(initial=True)
+    )
+    logger.info(
+        "[WebhookSim] Initial snapshot: %d transfers tracked, %d catchup events",
+        len(_known_statuses), len(initial_events),
+    )
+    _inject_events(initial_events)
 
     while True:
         await asyncio.sleep(POLL_INTERVAL)
         try:
             events = await asyncio.get_event_loop().run_in_executor(None, _poll_transfers)
-            for payload in events:
-                handle_webhook_event(
-                    payload=json.dumps(payload),
-                    signature="",
-                    secret="",  # skip validation in dev
-                )
-                logger.info(
-                    "[WebhookSim] Injected event: %s for %s",
-                    payload["type"],
-                    payload["data"]["id"],
-                )
+            _inject_events(events)
         except Exception as e:
             logger.warning("[WebhookSim] Poll cycle failed: %s", e)
 
