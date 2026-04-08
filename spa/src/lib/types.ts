@@ -49,7 +49,7 @@ export interface TransferOperation {
   status: OperationStatus;
 }
 
-export type TransactionStatus = "pending" | "processing" | "succeeded" | "failed" | "rejected";
+export type TransactionStatus = "pending" | "succeeded" | "failed" | "rejected" | "returned" | "return_pending";
 
 export interface Transaction {
   id: number;

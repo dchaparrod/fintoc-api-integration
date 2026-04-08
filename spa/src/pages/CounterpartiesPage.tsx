@@ -13,6 +13,7 @@ import {
 import { fetchInstitutions } from "@/services/api";
 import type { SavedCounterparty, Institution } from "@/lib/types";
 import { Users, Plus, Trash2, AlertTriangle, CheckCircle } from "lucide-react";
+import { isValidRut, cleanRut, formatRut } from "@/lib/rut";
 
 export default function CounterpartiesPage() {
   const [counterparties, setCounterparties] = useState<SavedCounterparty[]>([]);
@@ -68,7 +69,7 @@ export default function CounterpartiesPage() {
     setResult(null);
     try {
       const cp = await createSavedCounterparty({
-        holderId,
+        holderId: cleanRut(holderId),
         holderName,
         accountNumber,
         accountType,
@@ -165,7 +166,7 @@ export default function CounterpartiesPage() {
                   {counterparties.map((cp) => (
                     <tr key={cp.id} className="border-b border-border last:border-0">
                       <td className="p-3 font-medium">{cp.holder_name}</td>
-                      <td className="p-3 font-mono text-xs">{cp.holder_id}</td>
+                      <td className="p-3 font-mono text-xs">{formatRut(cp.holder_id)}</td>
                       <td className="p-3 font-mono text-xs">{cp.account_number}</td>
                       <td className="p-3">
                         <Badge variant="secondary">
@@ -216,9 +217,14 @@ export default function CounterpartiesPage() {
                     id="holderId"
                     value={holderId}
                     onChange={(e) => setHolderId(e.target.value)}
-                    placeholder="e.g. 771433855"
+                    placeholder="e.g. 77.143.385-5"
                     required
                   />
+                  {holderId && (
+                    <span className={`text-xs ${isValidRut(holderId) ? "text-emerald-600" : "text-red-500"}`}>
+                      {isValidRut(holderId) ? `${formatRut(holderId)}` : "Invalid RUT"}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -264,7 +270,7 @@ export default function CounterpartiesPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                <Button type="submit" disabled={creating || !holderId || !holderName || !accountNumber || !institutionId}>
+                <Button type="submit" disabled={creating || !holderId || !isValidRut(holderId) || !holderName || !accountNumber || !institutionId}>
                   {creating ? "Saving..." : "Save Counterparty"}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => { setShowForm(false); resetForm(); }}>

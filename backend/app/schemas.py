@@ -1,5 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
+
+from .helpers.rut import is_valid_rut, clean_rut
 
 
 # ── Counterparty ──────────────────────────────────────────
@@ -10,6 +12,14 @@ class CounterpartyRequest(BaseModel):
     account_number: str
     account_type: str
     institution_id: str
+
+    @field_validator("holder_id")
+    @classmethod
+    def validate_rut(cls, v: str) -> str:
+        cleaned = clean_rut(v)
+        if not is_valid_rut(cleaned):
+            raise ValueError(f"Invalid RUT: {v}")
+        return cleaned
 
 
 # ── Transfer ─────────────────────────────────────────────
@@ -57,3 +67,19 @@ class SimulateReceiveRequest(BaseModel):
     account_number_id: str
     amount: int
     currency: str = "CLP"
+
+
+class SplitTransferRequest(BaseModel):
+    total_amount: int
+    counterparty_name: Optional[str] = None
+    daily_limit: Optional[int] = None
+    start_date: Optional[str] = None  # ISO format: "2026-04-08"
+
+
+class ExecutionPlanRequest(BaseModel):
+    total_amount: int
+    counterparty_name: Optional[str] = None
+    account_id: Optional[str] = None
+    currency: Optional[str] = "CLP"
+    daily_limit: Optional[int] = None
+    start_date: Optional[str] = None  # ISO format: "2026-04-08"

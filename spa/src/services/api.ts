@@ -96,3 +96,89 @@ export async function healthCheck(): Promise<{ status: string }> {
   const response = await fetch(`${API_BASE}/health`);
   return handleResponse(response);
 }
+
+// ── Execution Plan ──────────────────────────────────────
+
+export interface ExecutionPlanScheduleItem {
+  day: number;
+  date: string;
+  amount: number;
+  cumulative: number;
+  remaining: number;
+  idempotency_key: string;
+}
+
+export interface ExecutionPlanResponse {
+  operation: {
+    total_amount: number;
+    currency: string;
+    counterparty: string;
+    account_id: string;
+  };
+  daily_limit: number;
+  total_days: number;
+  total_transactions: number;
+  schedule: ExecutionPlanScheduleItem[];
+}
+
+export async function fetchExecutionPlan(params: {
+  total_amount: number;
+  counterparty_name?: string;
+  account_id?: string;
+  currency?: string;
+  daily_limit?: number;
+  start_date?: string;
+}): Promise<ExecutionPlanResponse> {
+  const response = await fetch(`${API_BASE}/simulate/execution-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  return handleResponse<ExecutionPlanResponse>(response);
+}
+
+// ── Celery Tasks ────────────────────────────────────────
+
+export async function enqueuePendingTasks(
+  payload: object[],
+  simulate: boolean = false
+): Promise<{ task_id: string; status: string }> {
+  const response = await fetch(`${API_BASE}/tasks/process-pending?simulate=${simulate}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(response);
+}
+
+export async function fetchTaskStatus(taskId: string): Promise<{
+  task_id: string;
+  status: string;
+  result?: Record<string, unknown>;
+  error?: string;
+}> {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/status`);
+  return handleResponse(response);
+}
+
+// ── Webhook Events ──────────────────────────────────────
+
+export interface WebhookEvent {
+  id: string;
+  event_type: string;
+  transfer_id: string;
+  status: string;
+  timestamp: string;
+  raw_payload: Record<string, unknown>;
+}
+
+export async function fetchWebhookEvents(
+  since?: string,
+  limit: number = 50
+): Promise<WebhookEvent[]> {
+  const params = new URLSearchParams();
+  if (since) params.set("since", since);
+  params.set("limit", String(limit));
+  const response = await fetch(`${API_BASE}/webhook-events?${params}`);
+  return handleResponse<WebhookEvent[]>(response);
+}

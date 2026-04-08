@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { createTransferOperation, listSavedCounterparties } from "@/db/queries";
-import { fetchAccounts } from "@/services/api";
+import { createTransferOperation, listSavedCounterparties, updateTransactionStatus } from "@/db/queries";
+import { fetchAccounts, fetchExecutionPlan, executeTransfer } from "@/services/api";
+import type { ExecutionPlanResponse } from "@/services/api";
 import { formatCLP } from "@/lib/utils";
 import type { FintocAccount, SavedCounterparty } from "@/lib/types";
-import { Send, AlertTriangle, CheckCircle } from "lucide-react";
+import { Send, AlertTriangle, CheckCircle, CalendarDays } from "lucide-react";
 
 const DAILY_LIMIT = 7_000_000;
 
@@ -25,6 +26,9 @@ export default function TransferPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [executionPlan, setExecutionPlan] = useState<ExecutionPlanResponse | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -50,8 +54,28 @@ export default function TransferPage() {
   const daysNeeded = amountNum > 0 ? Math.ceil(amountNum / DAILY_LIMIT) : 0;
   const needsSplit = daysNeeded > 1;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handlePreview() {
+    if (!selectedAccount || !selectedCounterparty || amountNum <= 0) return;
+    setPlanLoading(true);
+    setExecutionPlan(null);
+    setResult(null);
+    try {
+      const plan = await fetchExecutionPlan({
+        total_amount: amountNum,
+        counterparty_name: selectedCounterparty.holder_name,
+        account_id: selectedAccount.id,
+        currency: "CLP",
+      });
+      setExecutionPlan(plan);
+      setShowPlan(true);
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Failed to fetch plan" });
+    } finally {
+      setPlanLoading(false);
+    }
+  }
+
+  async function handleConfirm() {
     if (!selectedAccount || !selectedCounterparty || amountNum <= 0) return;
 
     setLoading(true);
@@ -71,20 +95,57 @@ export default function TransferPage() {
         description,
       });
 
+      // Execute the first transaction immediately
+      const firstTx = transactions[0];
+      let execMsg = "";
+      try {
+        const transferResult = await executeTransfer({
+          client_id: operation.id,
+          account_id: selectedAccount.id,
+          amount: firstTx.amount,
+          currency: "CLP",
+          comment,
+          counterparty: {
+            holder_id: selectedCounterparty.holder_id,
+            holder_name: selectedCounterparty.holder_name,
+            account_number: selectedCounterparty.account_number,
+            account_type: selectedCounterparty.account_type,
+            institution_id: selectedCounterparty.institution_id,
+          },
+          idempotency_key: firstTx.idempotency_key,
+        });
+        await updateTransactionStatus(firstTx.id, transferResult.status, transferResult.id);
+        execMsg = ` — first transaction ${transferResult.status} (${formatCLP(firstTx.amount)})`;
+      } catch (execErr) {
+        await updateTransactionStatus(firstTx.id, "failed");
+        execMsg = ` — first transaction failed: ${execErr instanceof Error ? execErr.message : "Unknown error"}`;
+      }
+
       const txCount = transactions.length;
       const msg =
         txCount === 1
-          ? `Operation #${operation.id} created with 1 transaction (${formatCLP(amountNum)})`
-          : `Operation #${operation.id} created — split into ${txCount} transactions over ${txCount} days`;
+          ? `Operation #${operation.id} created${execMsg}`
+          : `Operation #${operation.id} created — split into ${txCount} transactions over ${txCount} days${execMsg}. Remaining ${txCount - 1} handled by daily cron.`;
 
       setResult({ success: true, message: msg });
       setAmount("");
       setComment("");
       setDescription("");
+      setExecutionPlan(null);
+      setShowPlan(false);
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : "Unknown error" });
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (needsSplit && !showPlan) {
+      handlePreview();
+    } else {
+      handleConfirm();
     }
   }
 
@@ -192,10 +253,68 @@ export default function TransferPage() {
               />
             </div>
 
-            <Button type="submit" disabled={loading || !selectedAccount || !selectedCounterparty || amountNum <= 0} className="w-full">
-              {loading ? "Creating..." : "Create Transfer Operation"}
+            <Button
+              type="submit"
+              disabled={loading || planLoading || !selectedAccount || !selectedCounterparty || amountNum <= 0}
+              className="w-full"
+            >
+              {planLoading
+                ? "Loading plan..."
+                : loading
+                ? "Creating..."
+                : needsSplit && !showPlan
+                ? "Preview Execution Plan"
+                : "Confirm & Create Operation"}
             </Button>
+
+            {showPlan && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full mt-2"
+                onClick={() => { setShowPlan(false); setExecutionPlan(null); }}
+              >
+                Cancel
+              </Button>
+            )}
           </form>
+
+          {executionPlan && showPlan && (
+            <div className="mt-6 border border-border rounded-md overflow-hidden">
+              <div className="bg-muted px-4 py-3 flex items-center gap-2">
+                <CalendarDays className="h-4 w-4" />
+                <span className="font-medium text-sm">
+                  Execution Plan — {executionPlan.total_days} day{executionPlan.total_days > 1 ? "s" : ""}, {executionPlan.total_transactions} transaction{executionPlan.total_transactions > 1 ? "s" : ""}
+                </span>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground border-b border-border">
+                    <th className="text-left p-3 font-medium">Day</th>
+                    <th className="text-left p-3 font-medium">Date</th>
+                    <th className="text-right p-3 font-medium">Amount</th>
+                    <th className="text-right p-3 font-medium">Cumulative</th>
+                    <th className="text-right p-3 font-medium">Remaining</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {executionPlan.schedule.map((row) => (
+                    <tr key={row.day} className="border-b border-border last:border-0">
+                      <td className="p-3 font-medium">{row.day}</td>
+                      <td className="p-3 font-mono text-xs">{row.date}</td>
+                      <td className="p-3 text-right">{formatCLP(row.amount)}</td>
+                      <td className="p-3 text-right text-muted-foreground">{formatCLP(row.cumulative)}</td>
+                      <td className="p-3 text-right text-muted-foreground">{formatCLP(row.remaining)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="bg-muted px-4 py-2 text-xs text-muted-foreground flex justify-between">
+                <span>Daily limit: {formatCLP(executionPlan.daily_limit)}</span>
+                <span>Total: {formatCLP(executionPlan.operation.total_amount)}</span>
+              </div>
+            </div>
+          )}
 
           {result && (
             <div
