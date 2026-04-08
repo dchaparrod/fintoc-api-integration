@@ -70,7 +70,15 @@ cd spa && npm install && npm run dev
 docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-10. Print access summary:
+10. Test pending transaction execution (dry-run, no real Fintoc transfer):
+```bash
+curl -s -X POST 'http://localhost:8000/api/transfer-pending?simulate=true' \
+  -H "Content-Type: application/json" \
+  -d '[{"account_id":"acc_demo_001","amount":7000000,"currency":"CLP","counterparty":{"holder_id":"771433855","holder_name":"Piped Piper SpA","account_number":"502955923","account_type":"checking_account","institution_id":"cl_banco_de_chile"},"idempotency_key":"test-sim-001","comment":"Simulated Day 1"}]' | python3 -m json.tool
+```
+Expected: returns `results` array with a simulated transfer response (status, id).
+
+11. Print access summary:
 // turbo
 ```bash
 echo ""
@@ -106,6 +114,21 @@ echo ""
 echo "  SPA polls GET /api/webhook-events every 5s and updates"
 echo "  PGlite transaction statuses automatically."
 echo ""
+echo "  Try It Out"
+echo "  ──────────"
+echo "  # Preview a 25M CLP split transfer"
+echo "  curl -s -X POST http://localhost:8000/api/simulate/split-transfer \\"
+echo "    -H 'Content-Type: application/json' \\"
+echo "    -d '{\"total_amount\": 25000000, \"counterparty_name\": \"Test\"}' | python3 -m json.tool"
+echo ""
+echo "  # Full execution plan with idempotency keys"
+echo "  curl -s -X POST http://localhost:8000/api/simulate/execution-plan \\"
+echo "    -H 'Content-Type: application/json' \\"
+echo "    -d '{\"total_amount\": 25000000, \"counterparty_name\": \"Test\", \"account_id\": \"acc_demo_001\"}' | python3 -m json.tool"
+echo ""
+echo "  # Interactive API docs (try any endpoint)"
+echo "  open http://localhost:8000/docs"
+echo ""
 echo "  Useful Commands"
 echo "  ───────────────"
 echo "  docker compose logs -f backend        Follow backend logs"
@@ -131,8 +154,8 @@ echo "    created_at"
 echo ""
 echo "  transactions"
 echo "    id | transfer_operation_id | amount | scheduled_date"
-echo "    status (pending | processing | pending_confirmation"
-echo "            | succeeded | failed | rejected)"
+echo "    status (pending | succeeded | failed | rejected"
+echo "            | returned | return_pending)"
 echo "    fintoc_transfer_id | idempotency_key | created_at"
 echo ""
 echo "═══════════════════════════════════════════════════════"
